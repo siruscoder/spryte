@@ -1,0 +1,5 @@
+export { default as Sidebar } from './Sidebar'
+export { default as ProtectedRoute } from './ProtectedRoute'
+export { default as Canvas } from './Canvas'
+export { default as AIContextMenu } from './AIContextMenu'
+export { default as AIInsightPopup } from './AIInsightPopup'
