@@ -4,7 +4,7 @@ import { Rnd } from 'react-rnd'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Sparkles, Loader2 } from 'lucide-react'
 import AnnotationMark from './AnnotationMark'
 import ReminderMark from './ReminderMark'
 import AIInsightPopup from '../AIInsightPopup'
@@ -12,6 +12,7 @@ import AnnotationPopup from '../AnnotationPopup'
 import AddonCommandMenu from '../AddonCommandMenu'
 import ReminderDialog from '../ReminderDialog'
 import { useAddonsStore } from '../../stores'
+import { aiApi } from '../../api'
 
 export default function TextBlock({
   block,
@@ -33,6 +34,7 @@ export default function TextBlock({
   const [selectedText, setSelectedText] = useState('')
   const [commandMenu, setCommandMenu] = useState(null)
   const [reminderDialog, setReminderDialog] = useState(null)
+  const [isPolishing, setIsPolishing] = useState(false)
   const blockRef = useRef(null)
   
   const { templates, actions, fetchCommands } = useAddonsStore()
@@ -377,6 +379,55 @@ export default function TextBlock({
     }
   }, [onDeleteAnnotation])
 
+  // Handle polish text with AI
+  const handlePolish = useCallback(async () => {
+    if (!editor || isPolishing) return
+    
+    setIsPolishing(true)
+    try {
+      // Get HTML content to preserve structure
+      const currentHtml = editor.getHTML()
+      if (!currentHtml.trim() || currentHtml === '<p></p>') {
+        setIsPolishing(false)
+        return
+      }
+      
+      // Extract annotation spans before polishing (to re-apply after)
+      const annotationRegex = /<span[^>]*data-annotation-id="([^"]+)"[^>]*>([^<]*)<\/span>/g
+      const annotationMap = new Map()
+      let match
+      while ((match = annotationRegex.exec(currentHtml)) !== null) {
+        const [, annotationId, annotatedText] = match
+        annotationMap.set(annotatedText.toLowerCase(), annotationId)
+      }
+      
+      // Remove annotation spans before sending to AI (to simplify the HTML)
+      const htmlWithoutAnnotations = currentHtml.replace(
+        /<span[^>]*data-annotation-id="[^"]*"[^>]*>([^<]*)<\/span>/g,
+        '$1'
+      )
+      
+      // Call AI to polish the HTML
+      const result = await aiApi.transform(htmlWithoutAnnotations, 'polish')
+      
+      if (result.text) {
+        let polishedHtml = result.text
+        
+        // Re-apply annotations if the annotated text still exists in polished version
+        for (const [text, annotationId] of annotationMap) {
+          const regex = new RegExp(`(${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+          polishedHtml = polishedHtml.replace(regex, `<span data-annotation-id="${annotationId}" class="annotation-highlight">$1</span>`)
+        }
+        
+        editor.commands.setContent(polishedHtml)
+      }
+    } catch (err) {
+      console.error('Failed to polish text:', err)
+    } finally {
+      setIsPolishing(false)
+    }
+  }, [editor, isPolishing])
+
   return (
     <>
       <div style={{ pointerEvents: isDrawingMode ? 'none' : 'auto' }}>
@@ -406,7 +457,7 @@ export default function TextBlock({
           onSelect()
         }}
         className={`
-          bg-white rounded-lg transition-colors
+          rounded-lg transition-colors
           ${isMinimalist 
             ? (isSelected 
                 ? 'border border-primary-500 shadow-sm' 
@@ -416,16 +467,38 @@ export default function TextBlock({
                 : 'border-2 border-transparent shadow-md hover:border-gray-300')
           }
         `}
+        style={{ backgroundColor: block.backgroundColor || '#ffffff' }}
         dragHandleClassName="drag-handle"
       >
         <div className="w-full h-full flex flex-col">
           {/* Drag handle header */}
-          <div className="drag-handle h-6 bg-gray-50 border-b border-gray-200 cursor-move flex items-center px-2 rounded-t-lg">
+          <div 
+            className="drag-handle h-6 border-b border-gray-200 cursor-move flex items-center justify-between px-2 rounded-t-lg"
+            style={{ backgroundColor: block.backgroundColor ? `color-mix(in srgb, ${block.backgroundColor} 70%, #9ca3af 30%)` : '#f9fafb' }}
+          >
             <div className="flex gap-1">
               <div className="w-2 h-2 rounded-full bg-gray-300" />
               <div className="w-2 h-2 rounded-full bg-gray-300" />
               <div className="w-2 h-2 rounded-full bg-gray-300" />
             </div>
+            {/* Polish button */}
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                handlePolish()
+              }}
+              disabled={isPolishing}
+              className="flex items-center gap-1 px-1.5 py-0.5 text-xs text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Polish text for clarity and brevity"
+            >
+              {isPolishing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              <span>Polish</span>
+            </button>
           </div>
           
           {/* Editor content */}

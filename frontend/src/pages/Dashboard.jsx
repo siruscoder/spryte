@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { BookOpen, FileText, Plus, Sparkles } from 'lucide-react'
+import { BookOpen, FileText, Plus, Sparkles, Loader2 } from 'lucide-react'
 import { useBooksStore, useNotesStore, useAddonsStore } from '../stores'
-import { SpriteCanvas, FloatingDrawingToolbar } from '../components'
+import { SpriteCanvas, FloatingDrawingToolbar, NoteSummaryModal } from '../components'
+import { aiApi } from '../api'
 
 export default function Dashboard() {
   const { booksTree, fetchBooks, selectedBook } = useBooksStore()
@@ -16,7 +17,34 @@ export default function Dashboard() {
   const [strokeStyle, setStrokeStyle] = useState('solid')
   const [fillColor, setFillColor] = useState('transparent')
   const [selectedShape, setSelectedShape] = useState(null)
+  const [showSummaryModal, setShowSummaryModal] = useState(false)
+  const [summaryData, setSummaryData] = useState({ summary: null, isLoading: false, error: null })
   const canvasRef = useRef(null)
+
+  const handleSummarizeNote = async () => {
+    if (!canvasRef.current || !selectedNote) return
+    
+    const blocks = canvasRef.current.getBlocks()
+    if (!blocks || blocks.length === 0) {
+      setSummaryData({ summary: null, isLoading: false, error: 'No content to summarize' })
+      setShowSummaryModal(true)
+      return
+    }
+    
+    setShowSummaryModal(true)
+    setSummaryData({ summary: null, isLoading: true, error: null })
+    
+    try {
+      const result = await aiApi.summarizeNote(selectedNote.title, blocks)
+      setSummaryData({ summary: result.summary, isLoading: false, error: null })
+    } catch (err) {
+      setSummaryData({ 
+        summary: null, 
+        isLoading: false, 
+        error: err.response?.data?.error || 'Failed to generate summary' 
+      })
+    }
+  }
 
   useEffect(() => {
     fetchBooks()
@@ -40,12 +68,41 @@ export default function Dashboard() {
             <FileText className="w-4 h-4 text-gray-400" />
             <h2 className="font-medium text-gray-900">{selectedNote.title}</h2>
           </div>
-          {linkedNotes.length > 0 && (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span>{linkedNotes.length} linked note{linkedNotes.length !== 1 ? 's' : ''}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {linkedNotes.length > 0 && (
+              <span className="text-sm text-gray-500">
+                {linkedNotes.length} linked note{linkedNotes.length !== 1 ? 's' : ''}
+              </span>
+            )}
+            <button
+              onClick={handleSummarizeNote}
+              disabled={summaryData.isLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 hover:text-primary-600 hover:border-primary-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {summaryData.isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              <span>Summarize</span>
+            </button>
+          </div>
         </div>
+
+        {/* Summary Modal */}
+        <NoteSummaryModal
+          isOpen={showSummaryModal}
+          onClose={() => setShowSummaryModal(false)}
+          summary={summaryData.summary}
+          title={selectedNote.title}
+          isLoading={summaryData.isLoading}
+          error={summaryData.error}
+          onSaveToCanvas={(htmlContent) => {
+            if (canvasRef.current) {
+              canvasRef.current.addSummaryBlock(htmlContent)
+            }
+          }}
+        />
         
         {/* Canvas with floating toolbar */}
         <div className="flex-1 relative">

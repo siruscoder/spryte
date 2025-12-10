@@ -400,7 +400,46 @@ const SpriteCanvas = forwardRef(({
         handleBlockUpdate(selectedBlockId, updates)
       }
     },
-  }), [selectedBlockId, handleBlockUpdate])
+    getBlocks: () => blocks,
+    addSummaryBlock: (htmlContent) => {
+      // Find a good position for the summary block (top-right area, avoiding existing blocks)
+      const existingBlocks = blocks.filter(b => b.type !== 'shape')
+      let x = 50
+      let y = 50
+      
+      if (existingBlocks.length > 0) {
+        // Find the rightmost block and place summary to its right
+        const rightmostBlock = existingBlocks.reduce((max, b) => 
+          (b.x + (b.width || 300)) > (max.x + (max.width || 300)) ? b : max
+        , existingBlocks[0])
+        x = rightmostBlock.x + (rightmostBlock.width || 300) + 30
+        y = 50
+        
+        // If too far right, place below all blocks instead
+        if (x > 800) {
+          const bottomBlock = existingBlocks.reduce((max, b) => 
+            (b.y + (b.height || 200)) > (max.y + (max.height || 200)) ? b : max
+          , existingBlocks[0])
+          x = 50
+          y = bottomBlock.y + (bottomBlock.height || 200) + 30
+        }
+      }
+      
+      const summaryBlock = {
+        id: uuidv4(),
+        type: 'text',
+        x,
+        y,
+        width: 400,
+        height: 300,
+        content: `<p><strong>📋 Summary</strong></p>${htmlContent}`,
+        backgroundColor: '#fef9c3', // Light yellow (Tailwind yellow-100)
+      }
+      
+      setBlocks(prev => [...prev, summaryBlock])
+      setSelectedBlockId(summaryBlock.id)
+    },
+  }), [selectedBlockId, handleBlockUpdate, blocks])
 
   // Handle annotation creation
   const handleCreateAnnotation = useCallback(async (blockId, selectedText, insight, prompt) => {

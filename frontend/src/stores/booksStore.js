@@ -19,7 +19,8 @@ const useBooksStore = create((set, get) => ({
   },
 
   selectBook: (book) => {
-    set({ selectedBook: book })
+    // Create new object reference to ensure React detects the change
+    set({ selectedBook: book ? { ...book } : null })
   },
 
   createBook: async (data) => {

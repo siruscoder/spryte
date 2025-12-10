@@ -26,10 +26,12 @@ function TreeItem({ item, type, level = 0, onSelect, onCreateChild, onEdit, onDe
   }
 
   const handleClick = () => {
-    if (hasChildren) {
-      handleToggleExpand()
-    }
+    // Always select the item
     onSelect(item)
+    // If it has children and is not expanded, expand it (but don't collapse on click)
+    if (hasChildren && !isExpanded && onToggleExpand) {
+      onToggleExpand(item.id)
+    }
   }
 
   return (
@@ -104,17 +106,6 @@ function TreeItem({ item, type, level = 0, onSelect, onCreateChild, onEdit, onDe
                     >
                       <FolderPlus className="w-4 h-4" />
                       Add sub-book
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setShowMenu(false)
-                        onCreateChild(item, 'note')
-                      }}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add note
                     </button>
                     <hr className="my-1" />
                   </>
@@ -375,18 +366,11 @@ export default function Sidebar() {
         const book = findBook(booksTree, selectedNote.book_id)
         if (book) {
           selectBook(book)
+          fetchNotes(book.id)
         }
       }
     }
-  }, [selectedNote, booksTree, selectedBook, selectBook])
-
-  useEffect(() => {
-    if (selectedBook) {
-      fetchNotes(selectedBook.id)
-    } else {
-      fetchNotes(null) // Clear notes when no book selected
-    }
-  }, [selectedBook, fetchNotes])
+  }, [selectedNote, booksTree, selectedBook, selectBook, fetchNotes])
 
   const handleCreateBook = async (e) => {
     e.preventDefault()
@@ -519,7 +503,15 @@ export default function Sidebar() {
                   return next
                 })
               }}
-              onSelect={(b) => selectBook(b)}
+              onSelect={(b) => {
+                // Always select and fetch notes when a book is clicked
+                selectBook(b)
+                fetchNotes(b.id)
+                // Clear selected note so canvas is blank until user clicks a note
+                selectNote(null)
+                // Navigate to /app to clear any noteId from URL
+                navigate('/app')
+              }}
               onCreateChild={(parent, childType) => {
                 setParentForNew(parent)
                 if (childType === 'book') {

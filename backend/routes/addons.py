@@ -120,7 +120,7 @@ AVAILABLE_ADDONS = [
                 "name": "Meeting Notes",
                 "description": "A structured template for capturing meeting discussions",
                 "icon": "Users",
-                "content": "<p>📋 <strong>Meeting Notes</strong></p><p></p><p>📅 <strong>Date:</strong> </p><p>🕐 <strong>Time:</strong> </p><p>📍 <strong>Location:</strong> </p><p></p><p><strong>Attendees</strong></p><ul><li><p></p></li></ul><p></p><hr><p></p><p><strong>Agenda</strong></p><ol><li><p></p></li></ol><p></p><p><strong>Discussion Notes</strong></p><p></p><p></p><p><strong>Decisions Made</strong></p><ul><li><p></p></li></ul><p></p><p><strong>Action Items</strong></p><ul><li><p>☐ </p></li></ul><p></p><p><strong>Next Steps</strong></p><p></p>"
+                "content": "<h1>📋 Meeting Notes</h1><p></p><p>📅 <strong>Date:</strong> </p><p>📍 <strong>Location:</strong> </p><p></p><p><strong>Attendees</strong></p><ul><li><p></p></li></ul><p></p><hr><p></p><p><strong>Agenda</strong></p><ol><li><p></p></li></ol><p></p><p><strong>Notes:</strong></p><p></p><p></p><p><strong>Action Items</strong></p><ul><li><p>☐ </p></li></ul>"
             }
         ],
         "actions": []

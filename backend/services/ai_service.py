@@ -21,6 +21,8 @@ class AIProvider(ABC):
             'bullets': f'Convert the following text into clear, organized bullet points:\n\n{text}',
             'insights': f'Generate key insights and follow-up questions based on the following text:\n\n{text}',
             'tasks': f'Extract actionable tasks from the following text and format them as a task list:\n\n{text}',
+            'polish': f'Polish the following HTML content for clarity and brevity. Rules:\n1. PRESERVE all HTML tags exactly as they are (<p>, <ul>, <ol>, <li>, <strong>, <em>, etc.).\n2. Only modify the text content inside the tags - do not change, remove, or add any HTML tags.\n3. Polish each paragraph or list item individually - do not merge or restructure.\n4. Remove unnecessary words and improve clarity within each element.\n5. Keep the core meaning intact.\n6. Return ONLY the polished HTML with no explanations or markdown.\n\nHTML to polish:\n\n{text}',
+            'summarize_note': f'Summarize the following note content. The note contains text blocks and diagram elements from a visual canvas.\n\nRules:\n1. Create a concise summary that captures the main ideas and key points.\n2. If there are diagram elements (shapes with labels), incorporate their meaning into the summary.\n3. Preserve the logical flow and relationships between ideas.\n4. Use clear, professional language.\n5. Format the summary as HTML: use <p> for paragraphs, <ul>/<li> for bullet points, <strong> for emphasis.\n6. Keep the summary concise but comprehensive.\n7. Return ONLY raw HTML. Do NOT wrap in code blocks, do NOT use ``` or ```html, do NOT include any markdown.\n\nNote content:\n\n{text}',
         }
         
         base_prompt = prompts.get(action, f'Process the following text: {text}')
@@ -122,6 +124,7 @@ class AIService:
     def get_available_actions(cls) -> list:
         """Get list of available AI actions."""
         return [
+            {'id': 'polish', 'name': 'Polish', 'description': 'Improve clarity and brevity'},
             {'id': 'rewrite', 'name': 'Rewrite for Clarity', 'description': 'Improve readability while keeping the same meaning'},
             {'id': 'summarize', 'name': 'Summarize', 'description': 'Create a concise summary'},
             {'id': 'expand', 'name': 'Expand', 'description': 'Add more detail and explanation'},

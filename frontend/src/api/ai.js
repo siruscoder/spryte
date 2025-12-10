@@ -10,4 +10,9 @@ export const aiApi = {
     const response = await client.get('/ai/actions')
     return response.data
   },
+
+  summarizeNote: async (title, blocks) => {
+    const response = await client.post('/ai/summarize-note', { title, blocks })
+    return response.data
+  },
 }
