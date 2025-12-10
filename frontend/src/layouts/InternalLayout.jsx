@@ -8,9 +8,11 @@ import {
   LogOut,
   User,
   ChevronDown,
+  Puzzle,
 } from 'lucide-react'
 import { useAuthStore } from '../stores'
 import Sidebar from '../components/Sidebar'
+import ReminderBell from '../components/ReminderBell'
 
 export default function InternalLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -50,12 +52,17 @@ export default function InternalLayout() {
             </Link>
           </div>
 
-          {/* Right side - User menu */}
-          <div className="relative">
-            <button
-              onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
+          {/* Right side - Notifications and User menu */}
+          <div className="flex items-center gap-2">
+            {/* Reminder Bell */}
+            <ReminderBell />
+            
+            {/* User menu */}
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
               <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                 <User className="w-4 h-4 text-primary-600" />
               </div>
@@ -86,6 +93,14 @@ export default function InternalLayout() {
                     Profile
                   </Link>
                   <Link
+                    to="/app/addons"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <Puzzle className="w-4 h-4" />
+                    Add-ons
+                  </Link>
+                  <Link
                     to="/app/settings"
                     onClick={() => setUserMenuOpen(false)}
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -104,6 +119,7 @@ export default function InternalLayout() {
                 </div>
               </>
             )}
+            </div>
           </div>
         </div>
       </header>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   BookOpen,
   FileText,
@@ -291,6 +292,8 @@ function NoteTreeItem({ item, level = 0, onSelect, onCreateChild, onEdit, onDele
 }
 
 export default function Sidebar() {
+  const navigate = useNavigate()
+  
   const {
     booksTree,
     selectedBook,
@@ -520,7 +523,10 @@ export default function Sidebar() {
                 key={note.id}
                 item={note}
                 selectedId={selectedNote?.id}
-                onSelect={(n) => selectNote(n.id)}
+                onSelect={(n) => {
+                  selectNote(n.id)
+                  navigate(`/app/note/${n.id}`)
+                }}
                 onCreateChild={(parent) => {
                   setParentForNew(parent)
                   setShowCreateNote(true)

@@ -1,17 +1,33 @@
-import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { BookOpen, FileText, Plus, Sparkles } from 'lucide-react'
-import { useBooksStore, useNotesStore } from '../stores'
-import { Canvas } from '../components'
+import { useBooksStore, useNotesStore, useAddonsStore } from '../stores'
+import { SpriteCanvas, FloatingDrawingToolbar } from '../components'
 
 export default function Dashboard() {
   const { booksTree, fetchBooks, selectedBook } = useBooksStore()
-  const { selectedNote, linkedNotes } = useNotesStore()
+  const { selectedNote, linkedNotes, selectNote } = useNotesStore()
+  const { fetchCommands } = useAddonsStore()
   const navigate = useNavigate()
+  const { noteId } = useParams()
+  const [activeDrawingShape, setActiveDrawingShape] = useState(null)
+  const [strokeColor, setStrokeColor] = useState('#374151')
+  const [strokeWidth, setStrokeWidth] = useState(2)
+  const [fillColor, setFillColor] = useState('transparent')
+  const [selectedShape, setSelectedShape] = useState(null)
+  const canvasRef = useRef(null)
 
   useEffect(() => {
     fetchBooks()
-  }, [fetchBooks])
+    fetchCommands()
+  }, [fetchBooks, fetchCommands])
+
+  // Load note from URL params if present
+  useEffect(() => {
+    if (noteId && (!selectedNote || selectedNote.id !== noteId)) {
+      selectNote(noteId)
+    }
+  }, [noteId, selectedNote, selectNote])
 
   // If a note is selected, show the canvas
   if (selectedNote) {
@@ -30,9 +46,44 @@ export default function Dashboard() {
           )}
         </div>
         
-        {/* Canvas */}
+        {/* Canvas with floating toolbar */}
         <div className="flex-1 relative">
-          <Canvas note={selectedNote} />
+          <FloatingDrawingToolbar
+            activeShape={activeDrawingShape}
+            onSelectShape={setActiveDrawingShape}
+            strokeColor={strokeColor}
+            strokeWidth={strokeWidth}
+            fillColor={fillColor}
+            onStrokeColorChange={(color) => {
+              setStrokeColor(color)
+              if (selectedShape && canvasRef.current) {
+                canvasRef.current.updateSelectedShape({ strokeColor: color })
+              }
+            }}
+            onStrokeWidthChange={(width) => {
+              setStrokeWidth(width)
+              if (selectedShape && canvasRef.current) {
+                canvasRef.current.updateSelectedShape({ strokeWidth: width })
+              }
+            }}
+            onFillColorChange={(color) => {
+              setFillColor(color)
+              if (selectedShape && canvasRef.current) {
+                canvasRef.current.updateSelectedShape({ fillColor: color })
+              }
+            }}
+            selectedShape={selectedShape}
+          />
+          <SpriteCanvas 
+            ref={canvasRef}
+            note={selectedNote} 
+            activeDrawingShape={activeDrawingShape}
+            onDrawingShapeChange={setActiveDrawingShape}
+            strokeColor={strokeColor}
+            strokeWidth={strokeWidth}
+            fillColor={fillColor}
+            onSelectedShapeChange={setSelectedShape}
+          />
         </div>
       </div>
     )

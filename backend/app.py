@@ -44,11 +44,13 @@ def create_app(config_name=None):
     init_db(app)
     
     # Register blueprints
-    from routes import auth_bp, books_bp, notes_bp, ai_bp
+    from routes import auth_bp, books_bp, notes_bp, ai_bp, addons_bp, reminders_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(books_bp)
     app.register_blueprint(notes_bp)
     app.register_blueprint(ai_bp)
+    app.register_blueprint(addons_bp)
+    app.register_blueprint(reminders_bp)
     
     # Health check endpoint
     @app.route('/api/health')

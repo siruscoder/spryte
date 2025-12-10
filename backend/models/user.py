@@ -20,7 +20,8 @@ class User:
         _id: Optional[ObjectId] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
-        settings: Optional[dict] = None
+        settings: Optional[dict] = None,
+        active_addons: Optional[list[str]] = None
     ):
         self._id = _id or ObjectId()
         self.email = email.lower().strip()
@@ -32,7 +33,8 @@ class User:
             'theme': 'light',
             'ai_provider': 'openai'
         }
-    
+        self.active_addons = active_addons or []
+
     @property
     def id(self) -> str:
         return str(self._id)
@@ -45,7 +47,8 @@ class User:
             'name': self.name,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
-            'settings': self.settings
+            'settings': self.settings,
+            'active_addons': self.active_addons
         }
         if include_password:
             data['password_hash'] = self.password_hash
@@ -59,7 +62,8 @@ class User:
             'name': self.name,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
-            'settings': self.settings
+            'settings': self.settings,
+            'active_addons': self.active_addons
         }
     
     @classmethod
@@ -72,7 +76,8 @@ class User:
             name=data['name'],
             created_at=data.get('created_at'),
             updated_at=data.get('updated_at'),
-            settings=data.get('settings')
+            settings=data.get('settings'),
+            active_addons=data.get('active_addons')
         )
     
     @staticmethod
@@ -108,6 +113,20 @@ class User:
             self.email = email.lower().strip()
         return self.save()
     
+    def enable_addon(self, addon_id: str) -> 'User':
+        """Enable an addon for the user."""
+        if addon_id not in self.active_addons:
+            self.active_addons.append(addon_id)
+            return self.save()
+        return self
+        
+    def disable_addon(self, addon_id: str) -> 'User':
+        """Disable an addon for the user."""
+        if addon_id in self.active_addons:
+            self.active_addons.remove(addon_id)
+            return self.save()
+        return self
+
     def change_password(self, new_password: str) -> 'User':
         """Change user password."""
         self.password_hash = self.hash_password(new_password)

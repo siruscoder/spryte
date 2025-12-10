@@ -25,6 +25,9 @@ export default function Settings() {
   const [aiProvider, setAiProvider] = useState(
     user?.settings?.ai_provider || 'openai'
   )
+  const [canvasMinimalist, setCanvasMinimalist] = useState(
+    user?.settings?.canvas_minimalist || false
+  )
   const [settingsSuccess, setSettingsSuccess] = useState('')
 
   const handlePasswordChange = async (e) => {
@@ -59,7 +62,11 @@ export default function Settings() {
     setSettingsSuccess('')
 
     try {
-      await updateSettings({ theme, ai_provider: aiProvider })
+      await updateSettings({ 
+        theme, 
+        ai_provider: aiProvider,
+        canvas_minimalist: canvasMinimalist 
+      })
       setSettingsSuccess('Settings saved successfully')
     } catch (err) {
       // Error handled by store
@@ -120,6 +127,24 @@ export default function Settings() {
               <p className="text-xs text-gray-500 mt-1">
                 Choose which AI provider to use for text transformations
               </p>
+            </div>
+
+            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <input
+                id="canvasMinimalist"
+                type="checkbox"
+                checked={canvasMinimalist}
+                onChange={(e) => setCanvasMinimalist(e.target.checked)}
+                className="mt-1 h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+              />
+              <div>
+                <label htmlFor="canvasMinimalist" className="text-sm font-medium text-gray-900 cursor-pointer select-none">
+                  Minimalist Canvas
+                </label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Hide grid lines and use subtle borders for a cleaner look
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-end">

@@ -41,8 +41,8 @@ export default function AnnotationPopup({
 
   // Adjust position to stay in viewport
   const getAdjustedPosition = () => {
-    const popupWidth = 300
-    const popupHeight = 200
+    const popupWidth = 350
+    const popupHeight = 300
     
     let left = position.x
     let top = position.y + 10
@@ -69,7 +69,7 @@ export default function AnnotationPopup({
       style={{
         left: adjustedPosition.left,
         top: adjustedPosition.top,
-        width: '300px',
+        width: '350px',
       }}
     >
       {/* Header */}
@@ -96,7 +96,7 @@ export default function AnnotationPopup({
 
       {/* Insight content */}
       <div className="p-4">
-        <div className="p-3 bg-gray-50 rounded-lg max-h-32 overflow-auto">
+        <div className="p-3 bg-gray-50 rounded-lg max-h-60 overflow-y-scroll border border-gray-100">
           <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
             {annotation.insight}
           </p>

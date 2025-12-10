@@ -1,24 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Tldraw } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
-import { useNotesStore } from '../stores'
+import { useNotesStore, useAddonsStore } from '../stores'
 import AIInsightPopup from './AIInsightPopup'
 import AnnotationPopup from './AnnotationPopup'
+import AddonCommandMenu from './AddonCommandMenu'
 import { useTextSelection } from '../hooks'
 
 export default function Canvas({ note }) {
   const { saveCanvas, isSaving, addAnnotation, deleteAnnotation } = useNotesStore()
+  const { templates, actions, fetchCommands } = useAddonsStore()
   const [editor, setEditor] = useState(null)
   const [insightPopup, setInsightPopup] = useState(null)
   const [annotationPopup, setAnnotationPopup] = useState(null)
   const [annotationIndicators, setAnnotationIndicators] = useState([])
+  const [commandMenu, setCommandMenu] = useState(null) // { position, filter }
   const saveTimeoutRef = useRef(null)
   const lastSavedRef = useRef(null)
   const canvasRef = useRef(null)
   const hasLoadedRef = useRef(false)
+  const atTriggerRef = useRef(null) // Track @ position for command menu
   
   // Track text selection for AI insight popup
   const { selection, clearSelection } = useTextSelection(canvasRef)
+
+  // Fetch addon commands on mount
+  useEffect(() => {
+    fetchCommands()
+  }, [fetchCommands])
+
+  // Debug: log templates/actions
+  useEffect(() => {
+    console.log('[Canvas] templates:', templates, 'actions:', actions)
+  }, [templates, actions])
 
   // Initialize editor
   const handleMount = useCallback((editorInstance) => {
@@ -264,6 +278,167 @@ export default function Canvas({ note }) {
     setInsightPopup(null)
   }, [note, insightPopup, addAnnotation, clearSelection])
 
+  // Detect @ trigger for command menu
+  useEffect(() => {
+    if (!editor) {
+      console.log('[Canvas] No editor yet')
+      return
+    }
+    if (templates.length === 0 && actions.length === 0) {
+      console.log('[Canvas] No templates or actions available')
+      return
+    }
+
+    console.log('[Canvas] Setting up @ detection with', templates.length, 'templates and', actions.length, 'actions')
+
+    const handleInput = (e) => {
+      console.log('[Canvas] Input event:', e.data, 'inputType:', e.inputType)
+      
+      // Check if we're editing a text shape
+      const editingShapeId = editor.getEditingShapeId()
+      console.log('[Canvas] Editing shape:', editingShapeId)
+      if (!editingShapeId) return
+
+      // Check if @ was typed (works with input event data)
+      if (e.data === '@') {
+        console.log('[Canvas] @ detected!')
+        // Get caret position for menu placement
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          const rect = range.getBoundingClientRect()
+          
+          atTriggerRef.current = {
+            shapeId: editingShapeId,
+            position: { x: rect.left, y: rect.bottom + 5 },
+          }
+          
+          // Show command menu
+          setCommandMenu({
+            position: atTriggerRef.current.position,
+            filter: '',
+            shapeId: editingShapeId,
+          })
+        }
+      }
+    }
+
+    const handleKeyDown = (e) => {
+      // Only handle keys when command menu is open
+      if (!commandMenu) return
+      
+      if (e.key === 'Backspace') {
+        if (commandMenu.filter.length > 0) {
+          setCommandMenu(prev => prev ? ({
+            ...prev,
+            filter: prev.filter.slice(0, -1),
+          }) : null)
+        } else {
+          // Close menu if backspacing past @
+          setCommandMenu(null)
+        }
+        return
+      }
+      
+      if (e.key === 'Escape') {
+        setCommandMenu(null)
+        return
+      }
+      
+      // Arrow keys and Enter/Tab are handled by AddonCommandMenu
+      if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab'].includes(e.key)) {
+        return
+      }
+      
+      // Add character to filter (ignore special keys)
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && e.key !== '@') {
+        setCommandMenu(prev => prev ? ({
+          ...prev,
+          filter: prev.filter + e.key,
+        }) : null)
+      }
+    }
+
+    // Use capture phase to get events before tldraw
+    document.addEventListener('input', handleInput, true)
+    document.addEventListener('keydown', handleKeyDown, true)
+    
+    return () => {
+      document.removeEventListener('input', handleInput, true)
+      document.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [editor, templates, actions, commandMenu])
+
+  // Handle template selection
+  const handleSelectTemplate = useCallback((template) => {
+    if (!editor || !commandMenu?.shapeId) {
+      setCommandMenu(null)
+      return
+    }
+
+    const shape = editor.getShape(commandMenu.shapeId)
+    if (!shape || shape.type !== 'text') {
+      setCommandMenu(null)
+      return
+    }
+
+    // Get current text and replace @filter with template content
+    const currentText = shape.props.text || ''
+    const filterWithAt = '@' + (commandMenu.filter || '')
+    const lastAtIndex = currentText.lastIndexOf(filterWithAt)
+    
+    let newText
+    if (lastAtIndex !== -1) {
+      newText = currentText.slice(0, lastAtIndex) + template.content
+    } else {
+      // Fallback: just append template
+      newText = currentText + template.content
+    }
+
+    // Update the shape
+    editor.updateShape({
+      id: commandMenu.shapeId,
+      type: 'text',
+      props: { text: newText },
+    })
+
+    setCommandMenu(null)
+  }, [editor, commandMenu])
+
+  // Handle action selection
+  const handleSelectAction = useCallback((action) => {
+    if (!editor || !commandMenu?.shapeId) {
+      setCommandMenu(null)
+      return
+    }
+
+    const shape = editor.getShape(commandMenu.shapeId)
+    if (!shape || shape.type !== 'text') {
+      setCommandMenu(null)
+      return
+    }
+
+    // Replace @filter with the action pattern (e.g., @Reminder)
+    const currentText = shape.props.text || ''
+    const filterWithAt = '@' + (commandMenu.filter || '')
+    const lastAtIndex = currentText.lastIndexOf(filterWithAt)
+    
+    let newText
+    if (lastAtIndex !== -1) {
+      newText = currentText.slice(0, lastAtIndex) + action.pattern + ' '
+    } else {
+      newText = currentText + action.pattern + ' '
+    }
+
+    editor.updateShape({
+      id: commandMenu.shapeId,
+      type: 'text',
+      props: { text: newText },
+    })
+
+    setCommandMenu(null)
+  }, [editor, commandMenu])
+
   return (
     <div 
       ref={canvasRef}
@@ -330,6 +505,19 @@ export default function Canvas({ note }) {
               console.error('Failed to delete annotation:', err)
             }
           }}
+        />
+      )}
+
+      {/* Addon Command Menu (appears when typing @) */}
+      {commandMenu && (templates.length > 0 || actions.length > 0) && (
+        <AddonCommandMenu
+          position={commandMenu.position}
+          templates={templates}
+          actions={actions}
+          filter={commandMenu.filter}
+          onSelectTemplate={handleSelectTemplate}
+          onSelectAction={handleSelectAction}
+          onClose={() => setCommandMenu(null)}
         />
       )}
     </div>

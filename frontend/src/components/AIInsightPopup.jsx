@@ -7,7 +7,7 @@ export default function AIInsightPopup({
   context = '', 
   position, 
   onClose, 
-  onAttach 
+  onAttach,
 }) {
   const [prompt, setPrompt] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -57,8 +57,9 @@ export default function AIInsightPopup({
 
   // Adjust position to stay in viewport
   const getAdjustedPosition = () => {
-    const popupWidth = 320
-    const popupHeight = insight ? 400 : 200
+    const popupWidth = 400
+    // Estimate height: header (50) + prompt (100) + insight (max 400) + buttons (60)
+    const popupHeight = insight ? 600 : 250
     
     let left = position.x
     let top = position.y + 10 // Offset below selection
@@ -138,7 +139,7 @@ export default function AIInsightPopup({
       style={{
         left: adjustedPosition.left,
         top: adjustedPosition.top,
-        width: '320px',
+        width: '400px',
       }}
     >
       {/* Header */}
@@ -201,7 +202,7 @@ export default function AIInsightPopup({
       {/* Insight result */}
       {insight && !isLoading && (
         <div className="p-4">
-          <div className="mb-3 p-3 bg-gray-50 rounded-lg max-h-48 overflow-auto">
+          <div className="mb-3 p-3 bg-gray-50 rounded-lg max-h-96 overflow-y-scroll border border-gray-100">
             <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
               {insight}
             </p>

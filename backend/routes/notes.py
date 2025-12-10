@@ -275,7 +275,7 @@ def add_annotation(note_id):
     # Validate required fields
     selected_text = data.get('selected_text')
     insight = data.get('insight')
-    shape_id = data.get('shape_id')
+    block_id = data.get('block_id') or data.get('shape_id')  # Support both names
     
     if not selected_text or not insight:
         return jsonify({'error': 'selected_text and insight are required'}), 400
@@ -286,7 +286,7 @@ def add_annotation(note_id):
         'id': str(ObjectId()),
         'selected_text': selected_text,
         'insight': insight,
-        'shape_id': shape_id,
+        'block_id': block_id,
         'prompt': data.get('prompt'),
         'created_at': datetime.utcnow().isoformat()
     }

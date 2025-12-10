@@ -1,7 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { ExternalLayout, InternalLayout } from './layouts'
-import { Landing, Login, Register, Dashboard, Profile, Settings } from './pages'
+import { Landing, Login, Register, Dashboard, Profile, Settings, Addons } from './pages'
 import { ProtectedRoute } from './components'
+import ReminderNotifier from './components/ReminderNotifier'
 import { useAuthStore } from './stores'
 
 function PublicRoute({ children }) {
@@ -17,7 +18,11 @@ function PublicRoute({ children }) {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      {/* Global reminder notification system */}
+      <ReminderNotifier />
+      
+      <Routes>
       {/* External (public) routes */}
       <Route element={<ExternalLayout />}>
         <Route
@@ -56,12 +61,15 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="note/:noteId" element={<Dashboard />} />
         <Route path="profile" element={<Profile />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="addons" element={<Addons />} />
       </Route>
 
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }

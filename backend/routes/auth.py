@@ -185,7 +185,11 @@ def update_settings():
     settings = data.get('settings', {})
     
     # Validate settings
-    allowed_settings = {'theme', 'ai_provider'}
+    allowed_settings = {'theme', 'ai_provider', 'canvas_minimalist'}
+    # Support flattened data or nested settings object
+    if not settings and data:
+        settings = {k: v for k, v in data.items() if k in allowed_settings}
+        
     filtered_settings = {k: v for k, v in settings.items() if k in allowed_settings}
     
     user.update_settings(filtered_settings)
