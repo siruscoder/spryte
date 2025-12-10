@@ -8,12 +8,25 @@ import { useNotesStore, useAuthStore } from '../../stores'
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 2
 
+// Convert stroke style to SVG stroke-dasharray
+function getStrokeDashArray(strokeStyle, strokeWidth = 2) {
+  switch (strokeStyle) {
+    case 'dashed':
+      return `${strokeWidth * 4},${strokeWidth * 2}`
+    case 'dotted':
+      return `${strokeWidth},${strokeWidth * 2}`
+    default:
+      return 'none'
+  }
+}
+
 const SpriteCanvas = forwardRef(({ 
   note, 
   activeDrawingShape, 
   onDrawingShapeChange,
   strokeColor = '#374151',
   strokeWidth = 2,
+  strokeStyle = 'solid',
   fillColor = 'transparent',
   onSelectedShapeChange,
 }, ref) => {
@@ -207,6 +220,7 @@ const SpriteCanvas = forwardRef(({
           shapeType: activeDrawingShape,
           strokeColor: strokeColor,
           strokeWidth: strokeWidth,
+          strokeStyle: strokeStyle,
           fillColor: fillColor,
         }
         
@@ -244,7 +258,7 @@ const SpriteCanvas = forwardRef(({
     }
     
     setIsPanning(false)
-  }, [isDrawing, drawingShape, activeDrawingShape, strokeColor, strokeWidth, fillColor, onDrawingShapeChange])
+  }, [isDrawing, drawingShape, activeDrawingShape, strokeColor, strokeWidth, strokeStyle, fillColor, onDrawingShapeChange])
 
   // Zoom handling
   const handleWheel = useCallback((e) => {
@@ -557,6 +571,7 @@ const SpriteCanvas = forwardRef(({
                 y2={drawingShape.currentY * camera.zoom + camera.y}
                 stroke={strokeColor}
                 strokeWidth={strokeWidth}
+                strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
                 markerEnd={activeDrawingShape === 'arrow' ? 'url(#preview-arrowhead)' : undefined}
               />
             </>
@@ -569,6 +584,7 @@ const SpriteCanvas = forwardRef(({
               height={Math.abs(drawingShape.currentY - drawingShape.startY) * camera.zoom}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
               fill={fillColor}
               rx="2"
             />
@@ -581,6 +597,7 @@ const SpriteCanvas = forwardRef(({
               ry={Math.abs(drawingShape.currentY - drawingShape.startY) / 2 * camera.zoom}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
               fill={fillColor}
             />
           )}
@@ -589,6 +606,7 @@ const SpriteCanvas = forwardRef(({
               points={`${(drawingShape.startX + drawingShape.currentX) / 2 * camera.zoom + camera.x},${Math.min(drawingShape.startY, drawingShape.currentY) * camera.zoom + camera.y} ${Math.min(drawingShape.startX, drawingShape.currentX) * camera.zoom + camera.x},${Math.max(drawingShape.startY, drawingShape.currentY) * camera.zoom + camera.y} ${Math.max(drawingShape.startX, drawingShape.currentX) * camera.zoom + camera.x},${Math.max(drawingShape.startY, drawingShape.currentY) * camera.zoom + camera.y}`}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
+              strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
               fill={fillColor}
             />
           )}

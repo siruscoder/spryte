@@ -46,24 +46,34 @@ const FILL_COLORS = [
 
 const STROKE_WIDTHS = [1, 2, 3, 4, 6]
 
+const STROKE_STYLES = [
+  { id: 'solid', label: 'Solid', dashArray: 'none' },
+  { id: 'dashed', label: 'Dashed', dashArray: '8,4' },
+  { id: 'dotted', label: 'Dotted', dashArray: '2,4' },
+]
+
 export default function FloatingDrawingToolbar({ 
   activeShape, 
   onSelectShape,
   strokeColor,
   strokeWidth,
+  strokeStyle = 'solid',
   fillColor,
   onStrokeColorChange,
   onStrokeWidthChange,
+  onStrokeStyleChange,
   onFillColorChange,
 }) {
   const [showStrokeColors, setShowStrokeColors] = useState(false)
   const [showFillColors, setShowFillColors] = useState(false)
   const [showWidths, setShowWidths] = useState(false)
+  const [showStyles, setShowStyles] = useState(false)
   const { uiComponents } = useAddonsStore()
   
   const strokeRef = useRef(null)
   const fillRef = useRef(null)
   const widthRef = useRef(null)
+  const styleRef = useRef(null)
 
   // Find the drawing component from addons
   const drawingComponent = uiComponents.find(c => c.id === 'drawing')
@@ -79,6 +89,9 @@ export default function FloatingDrawingToolbar({
       }
       if (widthRef.current && !widthRef.current.contains(e.target)) {
         setShowWidths(false)
+      }
+      if (styleRef.current && !styleRef.current.contains(e.target)) {
+        setShowStyles(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -218,6 +231,59 @@ export default function FloatingDrawingToolbar({
             )}
           </div>
 
+          {/* Stroke style */}
+          <div className="relative" ref={styleRef}>
+            <button
+              onClick={() => {
+                setShowStyles(!showStyles)
+                setShowStrokeColors(false)
+                setShowWidths(false)
+                setShowFillColors(false)
+              }}
+              className="p-2 rounded-md hover:bg-gray-100 flex items-center justify-center min-w-[32px]"
+              title="Stroke Style"
+            >
+              <svg width="20" height="12" className="text-gray-700">
+                <line 
+                  x1="0" y1="6" x2="20" y2="6" 
+                  stroke="currentColor" 
+                  strokeWidth="2"
+                  strokeDasharray={STROKE_STYLES.find(s => s.id === strokeStyle)?.dashArray || 'none'}
+                />
+              </svg>
+            </button>
+            
+            {showStyles && (
+              <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-2 z-50">
+                <div className="text-xs text-gray-500 mb-1.5 px-1">Style</div>
+                <div className="flex flex-col gap-1">
+                  {STROKE_STYLES.map((style) => (
+                    <button
+                      key={style.id}
+                      onClick={() => {
+                        onStrokeStyleChange(style.id)
+                        setShowStyles(false)
+                      }}
+                      className={`px-3 py-1.5 rounded flex items-center gap-2 ${
+                        strokeStyle === style.id ? 'bg-primary-50 text-primary-700' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <svg width="32" height="8" className="text-gray-700">
+                        <line 
+                          x1="0" y1="4" x2="32" y2="4" 
+                          stroke="currentColor" 
+                          strokeWidth="2"
+                          strokeDasharray={style.dashArray}
+                        />
+                      </svg>
+                      <span className="text-xs text-gray-500">{style.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Fill color */}
           <div className="relative" ref={fillRef}>
               <button
@@ -225,6 +291,7 @@ export default function FloatingDrawingToolbar({
                   setShowFillColors(!showFillColors)
                   setShowStrokeColors(false)
                   setShowWidths(false)
+                  setShowStyles(false)
                 }}
                 className="p-2 rounded-md hover:bg-gray-100 flex items-center gap-1"
                 title="Fill Color"

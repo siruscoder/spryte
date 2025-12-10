@@ -13,15 +13,21 @@ import {
 } from 'lucide-react'
 import { useBooksStore, useNotesStore } from '../stores'
 
-function TreeItem({ item, type, level = 0, onSelect, onCreateChild, onEdit, onDelete, selectedId }) {
+function TreeItem({ item, type, level = 0, onSelect, onCreateChild, onEdit, onDelete, selectedId, expandedIds, onToggleExpand }) {
   const isSelected = item.id === selectedId
-  const [isExpanded, setIsExpanded] = useState(false)
+  const isExpanded = expandedIds?.has(item.id) || false
   const [showMenu, setShowMenu] = useState(false)
   const hasChildren = item.children && item.children.length > 0
 
+  const handleToggleExpand = () => {
+    if (onToggleExpand) {
+      onToggleExpand(item.id)
+    }
+  }
+
   const handleClick = () => {
     if (hasChildren) {
-      setIsExpanded(!isExpanded)
+      handleToggleExpand()
     }
     onSelect(item)
   }
@@ -44,7 +50,7 @@ function TreeItem({ item, type, level = 0, onSelect, onCreateChild, onEdit, onDe
           }`}
           onClick={(e) => {
             e.stopPropagation()
-            setIsExpanded(!isExpanded)
+            handleToggleExpand()
           }}
         >
           {isExpanded ? (
@@ -155,6 +161,8 @@ function TreeItem({ item, type, level = 0, onSelect, onCreateChild, onEdit, onDe
               onEdit={onEdit}
               onDelete={onDelete}
               selectedId={selectedId}
+              expandedIds={expandedIds}
+              onToggleExpand={onToggleExpand}
             />
           ))}
         </div>
@@ -320,10 +328,57 @@ export default function Sidebar() {
   const [parentForNew, setParentForNew] = useState(null)
   const [editingItem, setEditingItem] = useState(null)
   const [editName, setEditName] = useState('')
+  const [expandedBookIds, setExpandedBookIds] = useState(new Set())
 
   useEffect(() => {
     fetchBooks()
   }, [fetchBooks])
+
+  // Auto-expand parent book and select it when a note is selected
+  useEffect(() => {
+    if (selectedNote && selectedNote.book_id && booksTree.length > 0) {
+      // Find the book and all its ancestors to expand them
+      const findBookPath = (books, id, path = []) => {
+        for (const book of books) {
+          if (book.id === id) return [...path, book.id]
+          if (book.children) {
+            const found = findBookPath(book.children, id, [...path, book.id])
+            if (found) return found
+          }
+        }
+        return null
+      }
+      
+      const findBook = (books, id) => {
+        for (const book of books) {
+          if (book.id === id) return book
+          if (book.children) {
+            const found = findBook(book.children, id)
+            if (found) return found
+          }
+        }
+        return null
+      }
+      
+      const bookPath = findBookPath(booksTree, selectedNote.book_id)
+      if (bookPath) {
+        setExpandedBookIds(prev => {
+          const next = new Set(prev)
+          // Expand all books in the path to the note's book
+          bookPath.forEach(id => next.add(id))
+          return next
+        })
+      }
+      
+      // Also select the parent book if not already selected (to show notes list)
+      if (!selectedBook || selectedBook.id !== selectedNote.book_id) {
+        const book = findBook(booksTree, selectedNote.book_id)
+        if (book) {
+          selectBook(book)
+        }
+      }
+    }
+  }, [selectedNote, booksTree, selectedBook, selectBook])
 
   useEffect(() => {
     if (selectedBook) {
@@ -452,6 +507,18 @@ export default function Sidebar() {
               item={book}
               type="book"
               selectedId={selectedBook?.id}
+              expandedIds={expandedBookIds}
+              onToggleExpand={(id) => {
+                setExpandedBookIds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(id)) {
+                    next.delete(id)
+                  } else {
+                    next.add(id)
+                  }
+                  return next
+                })
+              }}
               onSelect={(b) => selectBook(b)}
               onCreateChild={(parent, childType) => {
                 setParentForNew(parent)

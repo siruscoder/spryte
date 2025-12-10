@@ -218,6 +218,7 @@ The floating drawing toolbar provides:
 - **Shapes**: Line, Arrow, Rectangle, Circle, Triangle
 - **Stroke Color**: 8 preset colors
 - **Stroke Width**: 1-6px options
+- **Stroke Style**: Solid, Dashed, Dotted
 - **Fill Color**: Transparent + 7 preset colors
 
 When a shape is selected:

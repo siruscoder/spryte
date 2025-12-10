@@ -9,6 +9,18 @@ const RESIZE_HANDLE_SIZE = 8
 const DEFAULT_STROKE_COLOR = '#374151'
 const DEFAULT_STROKE_WIDTH = 2
 
+// Convert stroke style to SVG stroke-dasharray
+function getStrokeDashArray(strokeStyle, strokeWidth = 2) {
+  switch (strokeStyle) {
+    case 'dashed':
+      return `${strokeWidth * 4},${strokeWidth * 2}`
+    case 'dotted':
+      return `${strokeWidth},${strokeWidth * 2}`
+    default:
+      return 'none'
+  }
+}
+
 /**
  * Hook for dragging line endpoints with smooth updates
  */
@@ -166,8 +178,9 @@ function useLineDrag(onUpdate, zoom) {
  */
 function LineShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelete, zoom }) {
   const [isHovered, setIsHovered] = useState(false)
-  const { strokeColor = DEFAULT_STROKE_COLOR, strokeWidth = DEFAULT_STROKE_WIDTH, shapeType } = block
+  const { strokeColor = DEFAULT_STROKE_COLOR, strokeWidth = DEFAULT_STROKE_WIDTH, strokeStyle = 'solid', shapeType } = block
   const isArrow = shapeType === 'arrow'
+  const dashArray = getStrokeDashArray(strokeStyle, strokeWidth)
   
   const { startPoint, endPoint, x1, y1, x2, y2 } = getLineCoordinates(block)
   const { isDragging: isEndpointDragging, startDrag: startEndpointDrag } = useEndpointDrag(onUpdate, zoom)
@@ -239,6 +252,7 @@ function LineShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDele
           y2={lineEndY}
           stroke={strokeColor}
           strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
           markerEnd={isArrow ? `url(#arrowhead-${block.id})` : undefined}
         />
       </svg>
@@ -486,21 +500,60 @@ function ResizeHandle({ corner, x, y, onMouseDown, cursor }) {
  */
 function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelete, zoom }) {
   const [isHovered, setIsHovered] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editText, setEditText] = useState(block.text || '')
   const shapeRef = useRef(null)
-  const { shapeType, strokeColor = DEFAULT_STROKE_COLOR, strokeWidth = DEFAULT_STROKE_WIDTH, fillColor = 'transparent' } = block
+  const inputRef = useRef(null)
+  const { shapeType, strokeColor = DEFAULT_STROKE_COLOR, strokeWidth = DEFAULT_STROKE_WIDTH, strokeStyle = 'solid', fillColor = 'transparent' } = block
   const width = block.size?.width || 100
   const height = block.size?.height || 100
   const position = block.position || { x: 0, y: 0 }
   const rotation = block.rotation || 0
+  const shapeText = block.text || ''
+  const dashArray = getStrokeDashArray(strokeStyle, strokeWidth)
 
   const { isDragging, startDrag } = useBoxDrag(onUpdate, zoom)
   const { resizing, startResize } = useBoxResize(onUpdate, zoom)
   const { isRotating, startRotate } = useBoxRotation(onUpdate)
 
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
+
   const handleMouseDown = (e) => {
+    if (isEditing) {
+      e.stopPropagation()
+      return
+    }
     e.stopPropagation()
     onSelect()
     startDrag(position)(e)
+  }
+
+  const handleDoubleClick = (e) => {
+    e.stopPropagation()
+    setEditText(shapeText)
+    setIsEditing(true)
+  }
+
+  const handleTextSubmit = () => {
+    onUpdate({ text: editText.trim() })
+    setIsEditing(false)
+  }
+
+  const handleTextKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleTextSubmit()
+    } else if (e.key === 'Escape') {
+      setEditText(shapeText)
+      setIsEditing(false)
+    }
+    // Shift+Enter allows line break (default textarea behavior)
   }
 
   const renderSvgShape = () => {
@@ -513,6 +566,7 @@ function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelet
           ry={(height - strokeWidth) / 2}
           stroke={strokeColor}
           strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
           fill={fillColor}
         />
       )
@@ -531,6 +585,7 @@ function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelet
           points={`${topX},${topY} ${bottomLeftX},${bottomLeftY} ${bottomRightX},${bottomRightY}`}
           stroke={strokeColor}
           strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
           fill={fillColor}
         />
       )
@@ -543,6 +598,7 @@ function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelet
         height={height - strokeWidth}
         stroke={strokeColor}
         strokeWidth={strokeWidth}
+        strokeDasharray={dashArray}
         fill={fillColor}
         rx="2"
       />
@@ -562,10 +618,11 @@ function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelet
           height,
           transform: `rotate(${rotation}deg)`,
           transformOrigin: 'center',
-          cursor: isDragging ? 'grabbing' : 'move',
+          cursor: isEditing ? 'text' : isDragging ? 'grabbing' : 'move',
           pointerEvents: 'auto',
         }}
         onMouseDown={handleMouseDown}
+        onDoubleClick={handleDoubleClick}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -580,6 +637,42 @@ function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelet
         <svg width="100%" height="100%" className="pointer-events-none">
           {renderSvgShape()}
         </svg>
+
+        {/* Text content */}
+        <div 
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          style={{ overflow: 'visible' }}
+        >
+          {isEditing ? (
+            <textarea
+              ref={inputRef}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onBlur={handleTextSubmit}
+              onKeyDown={handleTextKeyDown}
+              className="text-center bg-white/90 border border-gray-300 rounded outline-none pointer-events-auto resize-none p-1"
+              style={{ 
+                color: strokeColor,
+                fontSize: 12,
+                minWidth: 80,
+                minHeight: 24,
+              }}
+              rows={Math.max(1, editText.split('\n').length)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : shapeText && (
+            <span 
+              className="text-center select-none whitespace-pre-wrap"
+              style={{ 
+                color: strokeColor,
+                fontSize: 12,
+                lineHeight: 1.3,
+              }}
+            >
+              {shapeText}
+            </span>
+          )}
+        </div>
 
         {/* Resize handles (when selected) */}
         {isSelected && (

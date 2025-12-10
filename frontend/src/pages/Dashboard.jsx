@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [activeDrawingShape, setActiveDrawingShape] = useState(null)
   const [strokeColor, setStrokeColor] = useState('#374151')
   const [strokeWidth, setStrokeWidth] = useState(2)
+  const [strokeStyle, setStrokeStyle] = useState('solid')
   const [fillColor, setFillColor] = useState('transparent')
   const [selectedShape, setSelectedShape] = useState(null)
   const canvasRef = useRef(null)
@@ -53,6 +54,7 @@ export default function Dashboard() {
             onSelectShape={setActiveDrawingShape}
             strokeColor={strokeColor}
             strokeWidth={strokeWidth}
+            strokeStyle={strokeStyle}
             fillColor={fillColor}
             onStrokeColorChange={(color) => {
               setStrokeColor(color)
@@ -64,6 +66,12 @@ export default function Dashboard() {
               setStrokeWidth(width)
               if (selectedShape && canvasRef.current) {
                 canvasRef.current.updateSelectedShape({ strokeWidth: width })
+              }
+            }}
+            onStrokeStyleChange={(style) => {
+              setStrokeStyle(style)
+              if (selectedShape && canvasRef.current) {
+                canvasRef.current.updateSelectedShape({ strokeStyle: style })
               }
             }}
             onFillColorChange={(color) => {
@@ -81,6 +89,7 @@ export default function Dashboard() {
             onDrawingShapeChange={setActiveDrawingShape}
             strokeColor={strokeColor}
             strokeWidth={strokeWidth}
+            strokeStyle={strokeStyle}
             fillColor={fillColor}
             onSelectedShapeChange={setSelectedShape}
           />
