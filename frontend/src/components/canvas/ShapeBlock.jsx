@@ -288,6 +288,225 @@ function LineShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDele
 }
 
 /**
+ * Curved Arrow shape component
+ */
+function CurvedArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelete, zoom }) {
+  const [isHovered, setIsHovered] = useState(false)
+  const { strokeColor = DEFAULT_STROKE_COLOR, strokeWidth = DEFAULT_STROKE_WIDTH, strokeStyle = 'solid' } = block
+  const dashArray = getStrokeDashArray(strokeStyle, strokeWidth)
+  
+  const { startPoint, endPoint, x1, y1, x2, y2 } = getLineCoordinates(block)
+  const { isDragging: isEndpointDragging, startDrag: startEndpointDrag } = useEndpointDrag(onUpdate, zoom)
+  const { isDragging: isLineDragging, startDrag: startLineDrag } = useLineDrag(onUpdate, zoom)
+
+  // Calculate control point for quadratic bezier curve
+  const midX = (x1 + x2) / 2
+  const midY = (y1 + y2) / 2
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const length = Math.sqrt(dx * dx + dy * dy)
+  // Control point perpendicular to line, offset by 40% of length
+  const curveOffset = length * 0.4
+  const controlX = midX - (dy / length) * curveOffset
+  const controlY = midY + (dx / length) * curveOffset
+
+  // Calculate arrow direction at end point (tangent to curve)
+  const t = 0.95 // Point near end to calculate tangent
+  const tangentX = 2 * (1 - t) * (controlX - x1) + 2 * t * (x2 - controlX)
+  const tangentY = 2 * (1 - t) * (controlY - y1) + 2 * t * (y2 - controlY)
+  const tangentLength = Math.sqrt(tangentX * tangentX + tangentY * tangentY)
+  const arrowAngle = Math.atan2(tangentY, tangentX) * 180 / Math.PI
+
+  // Hit area bounds
+  const hitArea = {
+    left: Math.min(x1, x2, controlX) - HIT_AREA_PADDING,
+    top: Math.min(y1, y2, controlY) - HIT_AREA_PADDING,
+    width: Math.max(x1, x2, controlX) - Math.min(x1, x2, controlX) + HIT_AREA_PADDING * 2,
+    height: Math.max(y1, y2, controlY) - Math.min(y1, y2, controlY) + HIT_AREA_PADDING * 2,
+  }
+
+  const handleMouseDown = (e) => {
+    e.stopPropagation()
+    onSelect()
+    startLineDrag(block.position || { x: 0, y: 0 })(e)
+  }
+
+  return (
+    <>
+      <div
+        className={`absolute ${isSelected ? 'z-10' : 'z-0'}`}
+        style={{
+          ...hitArea,
+          pointerEvents: 'auto',
+          cursor: 'move',
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      />
+
+      <svg
+        className="absolute pointer-events-none"
+        style={{ left: 0, top: 0, width: 1, height: 1, overflow: 'visible' }}
+      >
+        <defs>
+          <marker
+            id={`curved-arrowhead-${block.id}`}
+            markerWidth={ARROW_SIZE}
+            markerHeight={ARROW_SIZE}
+            refX={ARROW_SIZE - 1}
+            refY={ARROW_SIZE / 2}
+            orient="auto"
+          >
+            <polygon
+              points={`0 0, ${ARROW_SIZE} ${ARROW_SIZE / 2}, 0 ${ARROW_SIZE}`}
+              fill={strokeColor}
+            />
+          </marker>
+        </defs>
+        <path
+          d={`M ${x1} ${y1} Q ${controlX} ${controlY} ${x2} ${y2}`}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
+          fill="none"
+          markerEnd={`url(#curved-arrowhead-${block.id})`}
+        />
+      </svg>
+
+      {isSelected && (
+        <>
+          <EndpointHandle
+            x={x1}
+            y={y1}
+            isDragging={isEndpointDragging === 'start'}
+            onMouseDown={startEndpointDrag('start', startPoint)}
+          />
+          <EndpointHandle
+            x={x2}
+            y={y2}
+            isDragging={isEndpointDragging === 'end'}
+            onMouseDown={startEndpointDrag('end', endPoint)}
+          />
+        </>
+      )}
+
+      {(isSelected || isHovered) && !isMinimalist && (
+        <DeleteButton
+          onClick={onDelete}
+          className="absolute"
+          style={{ left: x2 + 5, top: y2 - 20, pointerEvents: 'auto' }}
+        />
+      )}
+    </>
+  )
+}
+
+/**
+ * Angled Arrow shape component (right-angle connector)
+ */
+function AngledArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelete, zoom }) {
+  const [isHovered, setIsHovered] = useState(false)
+  const { strokeColor = DEFAULT_STROKE_COLOR, strokeWidth = DEFAULT_STROKE_WIDTH, strokeStyle = 'solid' } = block
+  const dashArray = getStrokeDashArray(strokeStyle, strokeWidth)
+  
+  const { startPoint, endPoint, x1, y1, x2, y2 } = getLineCoordinates(block)
+  const { isDragging: isEndpointDragging, startDrag: startEndpointDrag } = useEndpointDrag(onUpdate, zoom)
+  const { isDragging: isLineDragging, startDrag: startLineDrag } = useLineDrag(onUpdate, zoom)
+
+  // Create right-angle path: horizontal first, then vertical
+  const midX = x2
+  const midY = y1
+
+  // Hit area bounds
+  const hitArea = {
+    left: Math.min(x1, x2) - HIT_AREA_PADDING,
+    top: Math.min(y1, y2) - HIT_AREA_PADDING,
+    width: Math.abs(x2 - x1) + HIT_AREA_PADDING * 2,
+    height: Math.abs(y2 - y1) + HIT_AREA_PADDING * 2,
+  }
+
+  const handleMouseDown = (e) => {
+    e.stopPropagation()
+    onSelect()
+    startLineDrag(block.position || { x: 0, y: 0 })(e)
+  }
+
+  // Arrow direction (vertical at end)
+  const arrowDir = y2 > y1 ? 1 : -1
+
+  return (
+    <>
+      <div
+        className={`absolute ${isSelected ? 'z-10' : 'z-0'}`}
+        style={{
+          ...hitArea,
+          pointerEvents: 'auto',
+          cursor: 'move',
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      />
+
+      <svg
+        className="absolute pointer-events-none"
+        style={{ left: 0, top: 0, width: 1, height: 1, overflow: 'visible' }}
+      >
+        <defs>
+          <marker
+            id={`angled-arrowhead-${block.id}`}
+            markerWidth={ARROW_SIZE}
+            markerHeight={ARROW_SIZE}
+            refX={ARROW_SIZE - 1}
+            refY={ARROW_SIZE / 2}
+            orient="auto"
+          >
+            <polygon
+              points={`0 0, ${ARROW_SIZE} ${ARROW_SIZE / 2}, 0 ${ARROW_SIZE}`}
+              fill={strokeColor}
+            />
+          </marker>
+        </defs>
+        <path
+          d={`M ${x1} ${y1} L ${midX} ${midY} L ${x2} ${y2}`}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
+          fill="none"
+          markerEnd={`url(#angled-arrowhead-${block.id})`}
+        />
+      </svg>
+
+      {isSelected && (
+        <>
+          <EndpointHandle
+            x={x1}
+            y={y1}
+            isDragging={isEndpointDragging === 'start'}
+            onMouseDown={startEndpointDrag('start', startPoint)}
+          />
+          <EndpointHandle
+            x={x2}
+            y={y2}
+            isDragging={isEndpointDragging === 'end'}
+            onMouseDown={startEndpointDrag('end', endPoint)}
+          />
+        </>
+      )}
+
+      {(isSelected || isHovered) && !isMinimalist && (
+        <DeleteButton
+          onClick={onDelete}
+          className="absolute"
+          style={{ left: x2 + 5, top: y2 - 20, pointerEvents: 'auto' }}
+        />
+      )}
+    </>
+  )
+}
+
+/**
  * Hook for dragging box shapes
  */
 function useBoxDrag(onUpdate, zoom) {
@@ -590,6 +809,113 @@ function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelet
         />
       )
     }
+    // Diamond (Decision shape in flowcharts)
+    if (shapeType === 'diamond') {
+      const padding = strokeWidth / 2
+      const midX = width / 2
+      const midY = height / 2
+      
+      return (
+        <polygon
+          points={`${midX},${padding} ${width - padding},${midY} ${midX},${height - padding} ${padding},${midY}`}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
+          fill={fillColor}
+        />
+      )
+    }
+    // Parallelogram (Input/Output shape in flowcharts)
+    if (shapeType === 'parallelogram') {
+      const padding = strokeWidth / 2
+      const skew = width * 0.2 // 20% skew
+      
+      return (
+        <polygon
+          points={`${skew + padding},${padding} ${width - padding},${padding} ${width - skew - padding},${height - padding} ${padding},${height - padding}`}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
+          fill={fillColor}
+        />
+      )
+    }
+    // Hexagon (Preparation shape in flowcharts)
+    if (shapeType === 'hexagon') {
+      const padding = strokeWidth / 2
+      const sideWidth = width * 0.25
+      
+      return (
+        <polygon
+          points={`${sideWidth},${padding} ${width - sideWidth},${padding} ${width - padding},${height / 2} ${width - sideWidth},${height - padding} ${sideWidth},${height - padding} ${padding},${height / 2}`}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
+          fill={fillColor}
+        />
+      )
+    }
+    // Cylinder (Database shape in flowcharts)
+    if (shapeType === 'cylinder') {
+      const padding = strokeWidth / 2
+      const ellipseHeight = height * 0.15
+      
+      return (
+        <g>
+          {/* Bottom ellipse (partially visible) */}
+          <ellipse
+            cx={width / 2}
+            cy={height - ellipseHeight}
+            rx={(width - strokeWidth) / 2}
+            ry={ellipseHeight - padding}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeDasharray={dashArray}
+            fill={fillColor}
+          />
+          {/* Body rectangle */}
+          <rect
+            x={padding}
+            y={ellipseHeight}
+            width={width - strokeWidth}
+            height={height - ellipseHeight * 2}
+            stroke="none"
+            fill={fillColor}
+          />
+          {/* Side lines */}
+          <line
+            x1={padding}
+            y1={ellipseHeight}
+            x2={padding}
+            y2={height - ellipseHeight}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeDasharray={dashArray}
+          />
+          <line
+            x1={width - padding}
+            y1={ellipseHeight}
+            x2={width - padding}
+            y2={height - ellipseHeight}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeDasharray={dashArray}
+          />
+          {/* Top ellipse */}
+          <ellipse
+            cx={width / 2}
+            cy={ellipseHeight}
+            rx={(width - strokeWidth) / 2}
+            ry={ellipseHeight - padding}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeDasharray={dashArray}
+            fill={fillColor}
+          />
+        </g>
+      )
+    }
+    // Default: rectangle
     return (
       <rect
         x={strokeWidth / 2}
@@ -714,7 +1040,17 @@ function BoxShape({ block, isSelected, isMinimalist, onSelect, onUpdate, onDelet
  */
 export default function ShapeBlock(props) {
   const { block } = props
-  const isLineType = block.shapeType === 'line' || block.shapeType === 'arrow'
   
-  return isLineType ? <LineShape {...props} /> : <BoxShape {...props} />
+  // Route to appropriate shape component based on type
+  switch (block.shapeType) {
+    case 'line':
+    case 'arrow':
+      return <LineShape {...props} />
+    case 'curved_arrow':
+      return <CurvedArrowShape {...props} />
+    case 'angled_arrow':
+      return <AngledArrowShape {...props} />
+    default:
+      return <BoxShape {...props} />
+  }
 }

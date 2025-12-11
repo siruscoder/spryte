@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { Minus, Plus, Maximize, ZoomIn } from 'lucide-react'
 import TextBlock from './TextBlock'
 import ShapeBlock from './ShapeBlock'
+import IconBlock from './IconBlock'
 import { useNotesStore, useAuthStore } from '../../stores'
 
 const MIN_ZOOM = 0.25
@@ -29,6 +30,7 @@ const SpriteCanvas = forwardRef(({
   strokeStyle = 'solid',
   fillColor = 'transparent',
   onSelectedShapeChange,
+  onIconPlace,
 }, ref) => {
   const { saveCanvas, isSaving, addAnnotation, deleteAnnotation } = useNotesStore()
   const { user } = useAuthStore()
@@ -224,7 +226,8 @@ const SpriteCanvas = forwardRef(({
           fillColor: fillColor,
         }
         
-        if (activeDrawingShape === 'line' || activeDrawingShape === 'arrow') {
+        const isLineType = ['line', 'arrow', 'curved_arrow', 'angled_arrow'].includes(activeDrawingShape)
+        if (isLineType) {
           // Lines/arrows use start and end points
           newBlock = {
             ...newBlock,
@@ -370,7 +373,7 @@ const SpriteCanvas = forwardRef(({
         
         if (!isEditing) {
           const selectedBlock = blocks.find(b => b.id === selectedBlockId)
-          if (selectedBlock?.type === 'shape') {
+          if (selectedBlock?.type === 'shape' || selectedBlock?.type === 'icon') {
             e.preventDefault()
             handleBlockDelete(selectedBlockId)
           }
@@ -385,13 +388,43 @@ const SpriteCanvas = forwardRef(({
   useEffect(() => {
     if (onSelectedShapeChange) {
       const selectedBlock = blocks.find(b => b.id === selectedBlockId)
-      if (selectedBlock?.type === 'shape') {
+      if (selectedBlock?.type === 'shape' || selectedBlock?.type === 'icon') {
         onSelectedShapeChange(selectedBlock)
       } else {
         onSelectedShapeChange(null)
       }
     }
   }, [selectedBlockId, blocks, onSelectedShapeChange])
+
+  // Handle icon placement
+  const handleIconPlace = useCallback((iconName) => {
+    // Place icon in center of viewport
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    
+    const centerX = (rect.width / 2 - camera.x) / camera.zoom
+    const centerY = (rect.height / 2 - camera.y) / camera.zoom
+    
+    const newBlock = {
+      id: uuidv4(),
+      type: 'icon',
+      iconName,
+      position: { x: centerX - 24, y: centerY - 24 }, // Center the 48px icon
+      size: 48,
+      color: strokeColor,
+      rotation: 0,
+    }
+    
+    setBlocks(prev => [...prev, newBlock])
+    setSelectedBlockId(newBlock.id)
+  }, [camera, strokeColor])
+
+  // Expose handleIconPlace to parent
+  useEffect(() => {
+    if (onIconPlace) {
+      onIconPlace(handleIconPlace)
+    }
+  }, [handleIconPlace, onIconPlace])
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
@@ -537,7 +570,7 @@ const SpriteCanvas = forwardRef(({
       >
         {/* Render text blocks first (bottom layer) */}
         {blocks
-          .filter(block => block.type !== 'shape')
+          .filter(block => block.type === 'text')
           .map(block => (
             <TextBlock
               key={block.id}
@@ -563,6 +596,22 @@ const SpriteCanvas = forwardRef(({
           .filter(block => block.type === 'shape')
           .map(block => (
             <ShapeBlock
+              key={block.id}
+              block={block}
+              isSelected={selectedBlockId === block.id}
+              isMinimalist={isMinimalist}
+              onSelect={() => setSelectedBlockId(block.id)}
+              onUpdate={(updates) => handleBlockUpdate(block.id, updates)}
+              onDelete={() => handleBlockDelete(block.id)}
+              zoom={camera.zoom}
+            />
+          ))}
+        
+        {/* Render icon blocks */}
+        {blocks
+          .filter(block => block.type === 'icon')
+          .map(block => (
+            <IconBlock
               key={block.id}
               block={block}
               isSelected={selectedBlockId === block.id}
@@ -615,6 +664,62 @@ const SpriteCanvas = forwardRef(({
               />
             </>
           )}
+          {activeDrawingShape === 'curved_arrow' && (() => {
+            const x1 = drawingShape.startX * camera.zoom + camera.x
+            const y1 = drawingShape.startY * camera.zoom + camera.y
+            const x2 = drawingShape.currentX * camera.zoom + camera.x
+            const y2 = drawingShape.currentY * camera.zoom + camera.y
+            const midX = (x1 + x2) / 2
+            const midY = (y1 + y2) / 2
+            const dx = x2 - x1
+            const dy = y2 - y1
+            const length = Math.sqrt(dx * dx + dy * dy) || 1
+            const curveOffset = length * 0.4
+            const controlX = midX - (dy / length) * curveOffset
+            const controlY = midY + (dx / length) * curveOffset
+            return (
+              <>
+                <defs>
+                  <marker id="preview-curved-arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                    <polygon points="0 0, 10 5, 0 10" fill={strokeColor} />
+                  </marker>
+                </defs>
+                <path
+                  d={`M ${x1} ${y1} Q ${controlX} ${controlY} ${x2} ${y2}`}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
+                  fill="none"
+                  markerEnd="url(#preview-curved-arrowhead)"
+                />
+              </>
+            )
+          })()}
+          {activeDrawingShape === 'angled_arrow' && (() => {
+            const x1 = drawingShape.startX * camera.zoom + camera.x
+            const y1 = drawingShape.startY * camera.zoom + camera.y
+            const x2 = drawingShape.currentX * camera.zoom + camera.x
+            const y2 = drawingShape.currentY * camera.zoom + camera.y
+            const midX = x2
+            const midY = y1
+            return (
+              <>
+                <defs>
+                  <marker id="preview-angled-arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                    <polygon points="0 0, 10 5, 0 10" fill={strokeColor} />
+                  </marker>
+                </defs>
+                <path
+                  d={`M ${x1} ${y1} L ${midX} ${midY} L ${x2} ${y2}`}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
+                  fill="none"
+                  markerEnd="url(#preview-angled-arrowhead)"
+                />
+              </>
+            )
+          })()}
           {activeDrawingShape === 'rectangle' && (
             <rect
               x={Math.min(drawingShape.startX, drawingShape.currentX) * camera.zoom + camera.x}
@@ -649,6 +754,81 @@ const SpriteCanvas = forwardRef(({
               fill={fillColor}
             />
           )}
+          {activeDrawingShape === 'diamond' && (() => {
+            const x = Math.min(drawingShape.startX, drawingShape.currentX) * camera.zoom + camera.x
+            const y = Math.min(drawingShape.startY, drawingShape.currentY) * camera.zoom + camera.y
+            const w = Math.abs(drawingShape.currentX - drawingShape.startX) * camera.zoom
+            const h = Math.abs(drawingShape.currentY - drawingShape.startY) * camera.zoom
+            return (
+              <polygon
+                points={`${x + w/2},${y} ${x + w},${y + h/2} ${x + w/2},${y + h} ${x},${y + h/2}`}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
+                strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
+                fill={fillColor}
+              />
+            )
+          })()}
+          {activeDrawingShape === 'parallelogram' && (() => {
+            const x = Math.min(drawingShape.startX, drawingShape.currentX) * camera.zoom + camera.x
+            const y = Math.min(drawingShape.startY, drawingShape.currentY) * camera.zoom + camera.y
+            const w = Math.abs(drawingShape.currentX - drawingShape.startX) * camera.zoom
+            const h = Math.abs(drawingShape.currentY - drawingShape.startY) * camera.zoom
+            const skew = w * 0.2
+            return (
+              <polygon
+                points={`${x + skew},${y} ${x + w},${y} ${x + w - skew},${y + h} ${x},${y + h}`}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
+                strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
+                fill={fillColor}
+              />
+            )
+          })()}
+          {activeDrawingShape === 'hexagon' && (() => {
+            const x = Math.min(drawingShape.startX, drawingShape.currentX) * camera.zoom + camera.x
+            const y = Math.min(drawingShape.startY, drawingShape.currentY) * camera.zoom + camera.y
+            const w = Math.abs(drawingShape.currentX - drawingShape.startX) * camera.zoom
+            const h = Math.abs(drawingShape.currentY - drawingShape.startY) * camera.zoom
+            const sw = w * 0.25
+            return (
+              <polygon
+                points={`${x + sw},${y} ${x + w - sw},${y} ${x + w},${y + h/2} ${x + w - sw},${y + h} ${x + sw},${y + h} ${x},${y + h/2}`}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
+                strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
+                fill={fillColor}
+              />
+            )
+          })()}
+          {activeDrawingShape === 'cylinder' && (() => {
+            const x = Math.min(drawingShape.startX, drawingShape.currentX) * camera.zoom + camera.x
+            const y = Math.min(drawingShape.startY, drawingShape.currentY) * camera.zoom + camera.y
+            const w = Math.abs(drawingShape.currentX - drawingShape.startX) * camera.zoom
+            const h = Math.abs(drawingShape.currentY - drawingShape.startY) * camera.zoom
+            const eh = h * 0.15
+            return (
+              <g>
+                <ellipse
+                  cx={x + w/2} cy={y + h - eh}
+                  rx={w/2} ry={eh}
+                  stroke={strokeColor} strokeWidth={strokeWidth}
+                  strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
+                  fill={fillColor}
+                />
+                <rect x={x} y={y + eh} width={w} height={h - eh * 2} stroke="none" fill={fillColor} />
+                <line x1={x} y1={y + eh} x2={x} y2={y + h - eh} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)} />
+                <line x1={x + w} y1={y + eh} x2={x + w} y2={y + h - eh} stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)} />
+                <ellipse
+                  cx={x + w/2} cy={y + eh}
+                  rx={w/2} ry={eh}
+                  stroke={strokeColor} strokeWidth={strokeWidth}
+                  strokeDasharray={getStrokeDashArray(strokeStyle, strokeWidth)}
+                  fill={fillColor}
+                />
+              </g>
+            )
+          })()}
         </svg>
       )}
 

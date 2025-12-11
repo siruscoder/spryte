@@ -8,9 +8,23 @@ import {
   Pencil,
   X,
   Palette,
-  Pipette
+  Pipette,
+  Diamond,
+  Hexagon,
+  Database,
+  Redo2,
+  CornerDownRight,
+  Smile,
 } from 'lucide-react'
 import { useAddonsStore } from '../../stores'
+import IconPicker from './IconPicker'
+
+// Custom Parallelogram icon (not in lucide)
+const Parallelogram = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 18L9 6h9l-3 12H6z" />
+  </svg>
+)
 
 const SHAPE_ICONS = {
   Minus,
@@ -19,6 +33,13 @@ const SHAPE_ICONS = {
   Square,
   Triangle,
   Pencil,
+  Diamond,
+  Hexagon,
+  Database,
+  Parallelogram,
+  Redo2,
+  CornerDownRight,
+  Smile,
 }
 
 // Preset colors for quick selection
@@ -63,11 +84,13 @@ export default function FloatingDrawingToolbar({
   onStrokeWidthChange,
   onStrokeStyleChange,
   onFillColorChange,
+  onIconSelect,
 }) {
   const [showStrokeColors, setShowStrokeColors] = useState(false)
   const [showFillColors, setShowFillColors] = useState(false)
   const [showWidths, setShowWidths] = useState(false)
   const [showStyles, setShowStyles] = useState(false)
+  const [showIconPicker, setShowIconPicker] = useState(false)
   const { uiComponents } = useAddonsStore()
   
   const strokeRef = useRef(null)
@@ -77,6 +100,9 @@ export default function FloatingDrawingToolbar({
 
   // Find the drawing component from addons
   const drawingComponent = uiComponents.find(c => c.id === 'drawing')
+  
+  // Find drawing extensions (like flowchart shapes from Work addon)
+  const drawingExtensions = uiComponents.filter(c => c.type === 'drawing_extension')
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -130,6 +156,47 @@ export default function FloatingDrawingToolbar({
             </button>
           )
         })}
+        
+        {/* Drawing extensions (e.g., flowchart shapes from Work addon) */}
+        {drawingExtensions.length > 0 && (
+          <>
+            <div className="w-px bg-gray-200 mx-0.5" />
+            {drawingExtensions.map(ext => 
+              ext.items.map((item) => {
+                const IconComponent = SHAPE_ICONS[item.icon] || Pencil
+                const isActive = activeShape === item.shape_type
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectShape(item.shape_type)}
+                    className={`p-2 rounded-md transition-colors ${
+                      isActive
+                        ? 'bg-primary-100 text-primary-700'
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                    title={`${item.name} (${ext.addon_name})`}
+                  >
+                    <IconComponent className="w-4 h-4" />
+                  </button>
+                )
+              })
+            )}
+          </>
+        )}
+        
+        {/* Icon tool */}
+        <div className="w-px bg-gray-200 mx-0.5" />
+        <button
+          onClick={() => setShowIconPicker(true)}
+          className={`p-2 rounded-md transition-colors ${
+            activeShape === 'icon'
+              ? 'bg-primary-100 text-primary-700'
+              : 'hover:bg-gray-100 text-gray-600'
+          }`}
+          title="Add Icon"
+        >
+          <Smile className="w-4 h-4" />
+        </button>
         
         {/* Cancel button when shape is active */}
         {activeShape && (
@@ -341,6 +408,19 @@ export default function FloatingDrawingToolbar({
           )}
         </div>
       </div>
+
+      {/* Icon Picker Modal */}
+      {showIconPicker && (
+        <IconPicker
+          onSelect={(iconName) => {
+            setShowIconPicker(false)
+            if (onIconSelect) {
+              onIconSelect(iconName)
+            }
+          }}
+          onClose={() => setShowIconPicker(false)}
+        />
+      )}
     </div>
   )
 }

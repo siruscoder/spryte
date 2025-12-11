@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # Backend Flask API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/spryte
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+    depends_on:
+      - mongodb
+    volumes:
+      - ./backend:/app
+    networks:
+      - spryte-network
+
+  # Frontend React app
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:8080"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - spryte-network
+
+  # MongoDB database
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=spryte
+    networks:
+      - spryte-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  spryte-network:
+    driver: bridge

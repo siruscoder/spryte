@@ -1,3 +1,5 @@
 export { default as SpriteCanvas } from './SpriteCanvas'
 export { default as TextBlock } from './TextBlock'
 export { default as AnnotationMark } from './AnnotationMark'
+export { default as IconBlock } from './IconBlock'
+export { default as IconPicker } from './IconPicker'

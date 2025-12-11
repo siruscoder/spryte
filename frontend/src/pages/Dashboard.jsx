@@ -20,6 +20,7 @@ export default function Dashboard() {
   const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [summaryData, setSummaryData] = useState({ summary: null, isLoading: false, error: null })
   const canvasRef = useRef(null)
+  const iconPlaceHandlerRef = useRef(null)
 
   const handleSummarizeNote = async () => {
     if (!canvasRef.current || !selectedNote) return
@@ -116,7 +117,12 @@ export default function Dashboard() {
             onStrokeColorChange={(color) => {
               setStrokeColor(color)
               if (selectedShape && canvasRef.current) {
-                canvasRef.current.updateSelectedShape({ strokeColor: color })
+                // For icons, update 'color' property; for shapes, update 'strokeColor'
+                if (selectedShape.type === 'icon') {
+                  canvasRef.current.updateSelectedShape({ color: color })
+                } else {
+                  canvasRef.current.updateSelectedShape({ strokeColor: color })
+                }
               }
             }}
             onStrokeWidthChange={(width) => {
@@ -134,7 +140,13 @@ export default function Dashboard() {
             onFillColorChange={(color) => {
               setFillColor(color)
               if (selectedShape && canvasRef.current) {
+                // Both icons and shapes use fillColor property
                 canvasRef.current.updateSelectedShape({ fillColor: color })
+              }
+            }}
+            onIconSelect={(iconName) => {
+              if (iconPlaceHandlerRef.current) {
+                iconPlaceHandlerRef.current(iconName)
               }
             }}
             selectedShape={selectedShape}
@@ -149,6 +161,9 @@ export default function Dashboard() {
             strokeStyle={strokeStyle}
             fillColor={fillColor}
             onSelectedShapeChange={setSelectedShape}
+            onIconPlace={(handler) => {
+              iconPlaceHandlerRef.current = handler
+            }}
           />
         </div>
       </div>

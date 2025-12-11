@@ -77,6 +77,12 @@ AVAILABLE_ADDONS = [
                         "name": "Triangle",
                         "icon": "Triangle",
                         "shape_type": "triangle"
+                    },
+                    {
+                        "id": "curved_arrow",
+                        "name": "Curved Arrow",
+                        "icon": "Redo2",
+                        "shape_type": "curved_arrow"
                     }
                 ]
             }
@@ -123,7 +129,48 @@ AVAILABLE_ADDONS = [
                 "content": "<h1>📋 Meeting Notes</h1><p></p><p>📅 <strong>Date:</strong> </p><p>📍 <strong>Location:</strong> </p><p></p><p><strong>Attendees</strong></p><ul><li><p></p></li></ul><p></p><hr><p></p><p><strong>Agenda</strong></p><ol><li><p></p></li></ol><p></p><p><strong>Notes:</strong></p><p></p><p></p><p><strong>Action Items</strong></p><ul><li><p>☐ </p></li></ul>"
             }
         ],
-        "actions": []
+        "actions": [],
+        "ui_components": [
+            {
+                "id": "flowchart",
+                "name": "Flowchart",
+                "description": "Flowchart shapes for workflow diagrams",
+                "icon": "GitBranch",
+                "type": "drawing_extension",
+                "items": [
+                    {
+                        "id": "diamond",
+                        "name": "Decision",
+                        "icon": "Diamond",
+                        "shape_type": "diamond"
+                    },
+                    {
+                        "id": "parallelogram",
+                        "name": "Input/Output",
+                        "icon": "Parallelogram",
+                        "shape_type": "parallelogram"
+                    },
+                    {
+                        "id": "hexagon",
+                        "name": "Preparation",
+                        "icon": "Hexagon",
+                        "shape_type": "hexagon"
+                    },
+                    {
+                        "id": "cylinder",
+                        "name": "Database",
+                        "icon": "Database",
+                        "shape_type": "cylinder"
+                    },
+                    {
+                        "id": "angled_arrow",
+                        "name": "Angled Arrow",
+                        "icon": "CornerDownRight",
+                        "shape_type": "angled_arrow"
+                    }
+                ]
+            }
+        ]
     }
 ]
 
