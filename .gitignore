@@ -32,3 +32,6 @@ coverage/
 # Misc
 *.bak
 *.tmp
+
+# Credentials / exports
+ptnadmin_accessKeys.csv
