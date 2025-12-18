@@ -45,7 +45,7 @@ This guide will walk you through deploying Spryte to AWS using ECS Fargate (serv
 ### 1.5 Get Connection String
 1. Go to "Database" → Click "Connect" on your cluster
 2. Select "Drivers"
-3. Copy the connection string (it looks like: `mongodb+srv://spryte-user:<password>@cluster.mongodb.net/spryte?retryWrites=true&w=majority`)
+3. Copy the connection string (it looks like: `mongodb+srv://spryte-user:<password>@cluster.mongodb.net/?retryWrites=true&w=majority`)
 4. Replace `<password>` with your actual password
 5. Save this string - we'll need it later
 
@@ -74,6 +74,8 @@ This guide will walk you through deploying Spryte to AWS using ECS Fargate (serv
 
 ## Step 3: Build and Push Docker Images
 
+If you are using an Apple Silicon Mac (M1/M2/M3) or you want the images to run reliably on AWS, build and push a multi-architecture image (linux/amd64 + linux/arm64) using `docker buildx`. This avoids "exec format error" / image pull issues.
+
 ### 3.1 Install AWS CLI and Configure
 ```bash
 # Install AWS CLI (if not installed)
@@ -94,34 +96,29 @@ aws ecr get-login-password --region YOUR_REGION | docker login --username AWS --
 
 ### 3.3 Build and Push Backend
 ```bash
-# Navigate to backend directory
-cd backend
+# From the repo root
 
-# Build Docker image
-docker build -t spryte-backend .
-
-# Tag for ECR
-docker tag spryte-backend:latest YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-backend:latest
-
-# Push to ECR
-docker push YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-backend:latest
+# Build and push multi-arch image (recommended)
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-backend:latest \
+  -f backend/Dockerfile backend \
+  --push
 ```
+
+
 
 ### 3.4 Build and Push Frontend
 ```bash
-# Navigate to frontend directory
-cd ../frontend
+# From the repo root
 
-# Build Docker image
-docker build -t spryte-frontend .
-
-# Tag for ECR
-docker tag spryte-frontend:latest YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-frontend:latest
-
-# Push to ECR
-docker push YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-frontend:latest
+# Build and push multi-arch image (recommended)
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-frontend:latest \
+  -f frontend/Dockerfile frontend \
+  --push
 ```
-
 ---
 
 ## Step 4: Set Up IAM Roles
@@ -178,30 +175,53 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-frontend:la
 ### 6.1 Create ECS Cluster
 1. Go to AWS Console → Search "ECS" → Open
 2. Click "Create cluster"
-3. Select "Networking only" → Next
+3. **Choose infrastructure:**
+   - Select **AWS Fargate** (recommended - serverless, no EC2 instances to manage)
+   - OR select **Amazon EC2** (if you need more control over instances)
 4. Cluster name: `spryte-cluster`
-5. Leave VPC settings default → Create
+5. **For Fargate:**
+   - Leave VPC settings as default (creates new VPC)
+   - Keep monitoring enabled
+6. **For EC2:**
+   - Select instance type (t3.micro or t3.small for testing)
+   - Leave VPC settings default
+7. Click "Create cluster"
 
 ### 6.2 Create Backend Task Definition
 1. In ECS, click "Task Definitions" → "Create new task definition"
 2. Select "FARGATE" → Next step
-3. Fill in:
-   - Task definition name: `spryte-backend`
-   - Task memory: `512`
-   - Task CPU: `256`
-4. Scroll to "Task execution IAM role" → Select `ecsTaskExecutionRole`
-5. Scroll to "Task role" → Select `ecsTaskRole`
+3. **Configure task and container definitions:**
+   - Task definition family: `spryte-backend`
+   - Task memory: start with `1024` (1 GB). If you see OOM / instability, increase to `3072` (3 GB).
+   - Task CPU: `512` (0.5 vCPU)
+4. **Task execution IAM role:** Select `ecsTaskExecutionRole`
+5. **Task role:** Select `ecsTaskRole`
+6. **Task size:** Keep default settings
+7. **Container definitions:** Click "Add container"
 
-**Add Container:**
-1. Click "Add container"
-2. Container name: `spryte-backend`
-3. Image: `YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-backend:latest`
-4. Memory limits: Soft limit: `512`
-5. Port mappings: Container port: `5000`
-6. Environment variables: Add `FLASK_ENV=production`
-7. Health check: Command: `["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]`
-8. Click "Add"
-9. Click "Create"
+**Container Configuration:**
+1. **Name:** `spryte-backend`
+2. **Image URI:** `727646509464.dkr.ecr.us-east-2.amazonaws.com/spryte-backend:latest`
+3. **Port mappings:** Container port: `5000`
+4. **Memory limits:** 
+   - Memory reservation: `512`
+   - Memory limit: `1024`
+5. **Environment variables:**
+   - Key: `FLASK_ENV`, Value: `production`
+6. **Important: health checks must match the real backend endpoint**
+   - Backend health endpoint is `GET /api/health` (not `/health`).
+   - If the task definition health check points to `/health`, ECS will continuously kill/restart tasks.
+6. **Health check:**
+   - Command: `["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]`
+   - Interval: `30`
+   - Timeout: `5`
+   - Retries: `3`
+   - Start period: `60`
+7. Click "Add" to add the container
+8. Click "Next" 
+9. Review and click "Create task definition"
+
+If your backend tasks start and then crash with MongoDB errors, see the database connectivity notes in Step 8.1 and the Troubleshooting section.
 
 ### 6.3 Create Frontend Task Definition
 1. Repeat the process for frontend:
@@ -233,12 +253,11 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-frontend:la
 3. Description: `Security group for Spryte ALB`
 4. Inbound rules:
    - Type: `HTTP`, Port: `80`, Source: `0.0.0.0/0`
-   - Type: `HTTPS`, Port: `443`, Source: `0.0.0.0/0`
 5. Click "Create"
 
 **Listeners:**
-- Default: HTTP on port 80
-- Click "Add listener" → HTTPS on port 443 (optional for SSL)
+- Default: `HTTP` on port `80`
+- Optional later: add `HTTPS` on port `443` only after you have an ACM certificate (you can keep this HTTP-only while learning)
 
 ### 7.2 Create Target Groups
 **Backend Target Group:**
@@ -247,7 +266,7 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-frontend:la
 3. Target type: `IP`
 4. Target group name: `spryte-backend-tg`
 5. Protocol: `HTTP`, Port: `5000`
-6. Health check path: `/health`
+6. Health check path: `/api/health`
 7. Click "Next" → "Create"
 
 **Frontend Target Group:**
@@ -262,33 +281,50 @@ docker push YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/spryte-frontend:la
 
 ### 8.1 Create Backend Service
 1. Go to ECS → Clusters → `spryte-cluster`
-2. Click "Create" → "Service"
-3. Launch type: `FARGATE`
-4. Task definition: `spryte-backend`
-5. Service name: `spryte-backend-service`
-6. Number of tasks: `1`
-7. Click "Next step"
-
-**Networking:**
-- VPC: Default VPC
-- Subnets: Select at least 2 public subnets
-- Security group: Create new one, allow HTTP from ALB
-
-**Load Balancing:**
-- Load balancer type: `Application Load Balancer`
-- Service IAM role: `AWSServiceRoleForECS`
-- Load balancer name: `spryte-alb`
-- Container to load balance: `spryte-backend:5000`
-- Target group: `spryte-backend-tg`
-
-Click "Next step" → "Create service"
+2. In the "Services" tab (it will show "Services (0)" at first), click **Create**
+3. **Environment / Compute options:** choose `Fargate` ("Networking only")
+4. **Deployment configuration:**
+   - Application type: `Service`
+   - Task definition: `spryte-backend` (latest revision)
+   - Service name: `spryte-backend-service`
+   - Desired tasks: `1`
+5. **Networking:**
+   - VPC: select the same VPC your ALB uses (default VPC is fine)
+   - Subnets: select at least 2 subnets (public subnets are fine for a first deploy)
+   - Security group: create/select `spryte-backend-sg`
+     - Inbound rule: TCP `5000` from **source = `spryte-alb-sg`** (the ALB security group)
+   - Public IP: enable **Auto-assign public IP** if you are using public subnets and connecting to MongoDB Atlas.
+     - MongoDB Atlas is on the public internet. Your ECS tasks must have outbound internet access.
+     - For a first deploy, public subnets + auto-assign public IP is the simplest.
+6. **Load balancing:**
+   - Turn on load balancing
+   - Load balancer type: `Application Load Balancer`
+   - Choose existing load balancer: `spryte-alb`
+   - Listener: `HTTP : 80`
+   - Target group: `spryte-backend-tg`
+   - Container to load balance: `spryte-backend` on container port `5000`
+7. Create the service
 
 ### 8.2 Create Frontend Service
 1. Repeat the process for frontend:
-   - Task definition: `spryte-frontend`
+   - Task definition: `spryte-frontend` (latest revision)
    - Service name: `spryte-frontend-service`
-   - Container: `spryte-frontend:8080`
+   - Desired tasks: `1`
+2. Networking:
+   - Create/select `spryte-frontend-sg`
+   - Inbound rule: TCP `8080` from **source = `spryte-alb-sg`**
+3. Load balancing:
+   - Existing ALB: `spryte-alb`
+   - Listener: `HTTP : 80`
    - Target group: `spryte-frontend-tg`
+   - Container to load balance: `spryte-frontend` on container port `8080`
+
+Important: if you accidentally create the frontend service with "Load balancing (0)" / "No Load Balancers", the ALB will return `503 Service Temporarily Unavailable` and the target group will show `0` registered targets. ECS does not let you add a load balancer to an existing service.
+
+If that happens:
+1. Update the service Desired tasks to `0`
+2. Delete the service
+3. Re-create it with the load balancer + target group attached
 
 ---
 
@@ -296,10 +332,10 @@ Click "Next step" → "Create service"
 
 ### 9.1 Update Listeners
 1. Go to EC2 → Load Balancers → `spryte-alb`
-2. Click "Listeners" tab
-3. Edit the HTTP listener (port 80)
-4. Default action: Forward to `spryte-frontend-tg`
-5. Click "Save"
+2. Click "Listeners and rules" (or "Listeners")
+3. Select the `HTTP : 80` listener
+4. Set the default action to: Forward to `spryte-frontend-tg`
+5. Save changes
 
 ### 9.2 Add API Routing Rule
 1. Click "View/edit rules"
@@ -316,6 +352,7 @@ Click "Next step" → "Create service"
 ### 10.1 Get Load Balancer URL
 1. Go to EC2 → Load Balancers → `spryte-alb`
 2. Copy the "DNS name" (looks like: `spryte-alb-123456.us-east-1.elb.amazonaws.com`)
+`http://spryte-alb-2043913613.us-east-2.elb.amazonaws.com`
 
 ### 10.2 Test Frontend
 1. Open browser → Go to your Load Balancer DNS name
@@ -392,13 +429,22 @@ Click "Next step" → "Create service"
 
 **Can't connect to database:**
 1. Verify MongoDB Atlas network access includes 0.0.0.0/0
+   - If Atlas only allows your home IP, ECS tasks will fail to connect.
 2. Check connection string format
 3. Verify database user has correct permissions
 
 **Load balancer health checks failing:**
-1. Check if /health endpoint exists in backend
+1. Backend health endpoint is `/api/health` (not `/health`)
 2. Verify security groups allow traffic from ALB
 3. Check target group health check settings
+
+**ECS cluster/services "missing" in the console:**
+1. Make sure you are in the correct AWS Region (ECS is regional)
+2. If you deployed to `us-east-2`, switch the console region to `us-east-2` and reload
+
+**View backend logs:**
+1. ECS → Cluster → Service → Tasks → click a task → Containers → `spryte-backend` → View logs in CloudWatch
+2. Or CloudWatch → Log groups → `/ecs/spryte-backend`
 
 **Frontend can't reach backend:**
 1. Verify API routing rules in load balancer

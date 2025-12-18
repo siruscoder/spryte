@@ -4,7 +4,7 @@ import { Rnd } from 'react-rnd'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Trash2, Sparkles, Loader2 } from 'lucide-react'
+import { Trash2, Sparkles, Loader2, Lightbulb, FileText, X } from 'lucide-react'
 import AnnotationMark from './AnnotationMark'
 import ReminderMark from './ReminderMark'
 import AIInsightPopup from '../AIInsightPopup'
@@ -31,11 +31,15 @@ export default function TextBlock({
 }) {
   const [showInsightPopup, setShowInsightPopup] = useState(null)
   const [showAnnotationPopup, setShowAnnotationPopup] = useState(null)
+  const [showAIActionsToolbar, setShowAIActionsToolbar] = useState(null)
+  const [aiPreview, setAiPreview] = useState(null)
   const [selectedText, setSelectedText] = useState('')
   const [commandMenu, setCommandMenu] = useState(null)
   const [reminderDialog, setReminderDialog] = useState(null)
   const [isPolishing, setIsPolishing] = useState(false)
   const blockRef = useRef(null)
+  const aiToolbarRef = useRef(null)
+  const aiPreviewRef = useRef(null)
   
   const { templates, actions, fetchCommands } = useAddonsStore()
   
@@ -332,13 +336,125 @@ export default function TextBlock({
       const { from, to } = editor.state.selection
       
       setSelectedText(text)
-      setShowInsightPopup({
+      setShowAIActionsToolbar({
         text,
         position: { x: e.clientX, y: e.clientY + 10 },
-        selectionRange: { from, to }, // Store for later use when attaching
+        selectionRange: { from, to },
       })
     }
   }, [editor])
+
+  useEffect(() => {
+    if (!showAIActionsToolbar && !aiPreview) return
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowAIActionsToolbar(null)
+        setAiPreview(null)
+        setSelectedText('')
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showAIActionsToolbar, aiPreview])
+
+  useEffect(() => {
+    if (!showAIActionsToolbar && !aiPreview) return
+
+    const closeAIOverlays = () => {
+      setShowAIActionsToolbar(null)
+      setAiPreview(null)
+      setSelectedText('')
+    }
+
+    const handleMouseDownCapture = (e) => {
+      const toolbarEl = aiToolbarRef.current
+      const previewEl = aiPreviewRef.current
+
+      const clickedInsideToolbar = toolbarEl ? toolbarEl.contains(e.target) : false
+      const clickedInsidePreview = previewEl ? previewEl.contains(e.target) : false
+
+      if (!clickedInsideToolbar && !clickedInsidePreview) {
+        closeAIOverlays()
+      }
+    }
+
+    const handleSelectionChange = () => {
+      const s = window.getSelection()
+      const text = s?.toString().trim() || ''
+      if (!text) {
+        closeAIOverlays()
+      }
+    }
+
+    document.addEventListener('mousedown', handleMouseDownCapture, true)
+    document.addEventListener('selectionchange', handleSelectionChange)
+
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDownCapture, true)
+      document.removeEventListener('selectionchange', handleSelectionChange)
+    }
+  }, [showAIActionsToolbar, aiPreview])
+
+  const runAIActionForSelection = useCallback(async (actionId) => {
+    if (!editor || !showAIActionsToolbar?.text || !showAIActionsToolbar?.selectionRange) return
+
+    const { text, position, selectionRange } = showAIActionsToolbar
+    setAiPreview({
+      actionId,
+      isLoading: true,
+      error: null,
+      resultText: '',
+      position,
+      selectionRange,
+      selectedText: text,
+    })
+
+    try {
+      const response = await aiApi.transform(text, actionId, block.content || null)
+      setAiPreview((prev) => prev ? ({
+        ...prev,
+        isLoading: false,
+        resultText: response.text || '',
+      }) : null)
+    } catch (err) {
+      setAiPreview((prev) => prev ? ({
+        ...prev,
+        isLoading: false,
+        error: err.response?.data?.error || 'AI transformation failed',
+      }) : null)
+    }
+  }, [editor, showAIActionsToolbar])
+
+  const applyAIPreview = useCallback((applyMode) => {
+    if (!editor || !aiPreview?.selectionRange || !aiPreview?.resultText) return
+
+    const { from, to } = aiPreview.selectionRange
+    const resultText = aiPreview.resultText
+
+    if (applyMode === 'replace') {
+      editor
+        .chain()
+        .focus()
+        .setTextSelection({ from, to })
+        .deleteSelection()
+        .insertContent(resultText)
+        .run()
+    }
+
+    if (applyMode === 'append') {
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(to, ` (${resultText})`)
+        .run()
+    }
+
+    setAiPreview(null)
+    setShowAIActionsToolbar(null)
+    setSelectedText('')
+  }, [editor, aiPreview])
 
   // Handle attaching insight as annotation
   const handleAttachInsight = useCallback(async (insightData) => {
@@ -562,6 +678,127 @@ export default function TextBlock({
           }}
           onAttach={handleAttachInsight}
         />,
+        document.body
+      )}
+
+      {showAIActionsToolbar && !aiPreview && createPortal(
+        <div
+          className="fixed z-[9999] flex items-center gap-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1"
+          style={{ left: showAIActionsToolbar.position.x, top: showAIActionsToolbar.position.y }}
+          ref={aiToolbarRef}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className="p-1.5 rounded transition-colors text-purple-700 hover:bg-purple-50"
+            title="AI Insight"
+            onClick={() => {
+              const payload = showAIActionsToolbar
+              setShowInsightPopup({
+                text: payload.text,
+                position: payload.position,
+                selectionRange: payload.selectionRange,
+              })
+              setShowAIActionsToolbar(null)
+            }}
+          >
+            <Sparkles className="w-4 h-4" />
+          </button>
+          <button
+            className="p-1.5 rounded transition-colors text-amber-700 hover:bg-amber-50"
+            title="Clarify"
+            onClick={() => runAIActionForSelection('clarify')}
+          >
+            <Lightbulb className="w-4 h-4" />
+          </button>
+          <button
+            className="p-1.5 rounded transition-colors text-blue-700 hover:bg-blue-50"
+            title="Summarize"
+            onClick={() => runAIActionForSelection('summarize')}
+          >
+            <FileText className="w-4 h-4" />
+          </button>
+          <div className="w-px h-5 bg-gray-200 mx-1" />
+          <button
+            className="p-1.5 rounded transition-colors text-gray-700 hover:bg-gray-100"
+            title="Close"
+            onClick={() => {
+              setShowAIActionsToolbar(null)
+              setSelectedText('')
+            }}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>,
+        document.body
+      )}
+
+      {aiPreview && createPortal(
+        <div
+          className="fixed z-[9999] w-[420px] bg-white border border-gray-200 rounded-lg shadow-xl"
+          style={{ left: aiPreview.position.x, top: aiPreview.position.y + 10 }}
+          ref={aiPreviewRef}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
+              <Sparkles className="w-4 h-4 text-primary-600" />
+              <span>{aiPreview.actionId === 'summarize' ? 'Summarize' : 'Clarify'}</span>
+            </div>
+            <button
+              className="p-1 rounded hover:bg-gray-100 text-gray-700"
+              onClick={() => {
+                setAiPreview(null)
+                setShowAIActionsToolbar(null)
+                setSelectedText('')
+              }}
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="px-3 py-2">
+            {aiPreview.isLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Working…</span>
+              </div>
+            )}
+            {!aiPreview.isLoading && aiPreview.error && (
+              <div className="text-sm text-red-600">{aiPreview.error}</div>
+            )}
+            {!aiPreview.isLoading && !aiPreview.error && (
+              <div className="text-sm text-gray-800 whitespace-pre-wrap">{aiPreview.resultText}</div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-200">
+            <button
+              className="px-2.5 py-1.5 text-sm rounded border border-gray-200 hover:bg-gray-50 text-gray-700"
+              onClick={() => {
+                setAiPreview(null)
+                setShowAIActionsToolbar(null)
+                setSelectedText('')
+              }}
+            >
+              Cancel
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="px-2.5 py-1.5 text-sm rounded bg-primary-600 hover:bg-primary-700 text-white"
+                onClick={() => applyAIPreview('replace')}
+              >
+                Replace selection
+              </button>
+              <button
+                className="px-2.5 py-1.5 text-sm rounded bg-primary-600 hover:bg-primary-700 text-white"
+                onClick={() => applyAIPreview('append')}
+              >
+                Append (in parentheses)
+              </button>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
 

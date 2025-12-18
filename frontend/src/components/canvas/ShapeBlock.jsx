@@ -5,6 +5,7 @@ import { Trash2, RotateCw } from 'lucide-react'
 const ARROW_SIZE = 10
 const HIT_AREA_PADDING = 15
 const HANDLE_SIZE = 16
+const MID_HANDLE_SIZE = 12
 const RESIZE_HANDLE_SIZE = 8
 const DEFAULT_STROKE_COLOR = '#374151'
 const DEFAULT_STROKE_WIDTH = 2
@@ -70,6 +71,52 @@ function useEndpointDrag(onUpdate, zoom) {
   return { isDragging, startDrag }
 }
 
+function useFreeDrag(onMove, zoom) {
+  const [isDragging, setIsDragging] = useState(false)
+  const dragStartRef = useRef(null)
+
+  const startDrag = (currentPoint) => (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      pointX: currentPoint.x,
+      pointY: currentPoint.y,
+    }
+    setIsDragging(true)
+  }
+
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e) => {
+      if (!dragStartRef.current) return
+      const deltaX = (e.clientX - dragStartRef.current.mouseX) / zoom
+      const deltaY = (e.clientY - dragStartRef.current.mouseY) / zoom
+      const newPoint = {
+        x: dragStartRef.current.pointX + deltaX,
+        y: dragStartRef.current.pointY + deltaY,
+      }
+      onMove(newPoint, deltaX, deltaY)
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+      dragStartRef.current = null
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, zoom, onMove])
+
+  return { isDragging, startDrag }
+}
+
 /**
  * Calculate line coordinates from block data
  */
@@ -116,6 +163,22 @@ function EndpointHandle({ x, y, isDragging, onMouseDown }) {
       style={{
         left: x - HANDLE_SIZE / 2,
         top: y - HANDLE_SIZE / 2,
+        pointerEvents: 'auto',
+      }}
+      onMouseDown={onMouseDown}
+    />
+  )
+}
+
+function MidpointHandle({ x, y, isDragging, onMouseDown }) {
+  return (
+    <div
+      className={`absolute bg-white border-2 border-primary-500 rounded-full cursor-grab hover:bg-primary-100 z-20 ${isDragging ? 'bg-primary-200 cursor-grabbing' : ''}`}
+      style={{
+        width: MID_HANDLE_SIZE,
+        height: MID_HANDLE_SIZE,
+        left: x - MID_HANDLE_SIZE / 2,
+        top: y - MID_HANDLE_SIZE / 2,
         pointerEvents: 'auto',
       }}
       onMouseDown={onMouseDown}
@@ -296,6 +359,7 @@ function CurvedArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate,
   const dashArray = getStrokeDashArray(strokeStyle, strokeWidth)
   
   const { startPoint, endPoint, x1, y1, x2, y2 } = getLineCoordinates(block)
+  const pos = block.position || { x: 0, y: 0 }
   const { isDragging: isEndpointDragging, startDrag: startEndpointDrag } = useEndpointDrag(onUpdate, zoom)
   const { isDragging: isLineDragging, startDrag: startLineDrag } = useLineDrag(onUpdate, zoom)
 
@@ -304,11 +368,27 @@ function CurvedArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate,
   const midY = (y1 + y2) / 2
   const dx = x2 - x1
   const dy = y2 - y1
-  const length = Math.sqrt(dx * dx + dy * dy)
+  const length = Math.sqrt(dx * dx + dy * dy) || 1
   // Control point perpendicular to line, offset by 40% of length
   const curveOffset = length * 0.4
-  const controlX = midX - (dy / length) * curveOffset
-  const controlY = midY + (dx / length) * curveOffset
+  const defaultControlX = midX - (dy / length) * curveOffset
+  const defaultControlY = midY + (dx / length) * curveOffset
+  const controlX = typeof block.controlPoint?.x === 'number' ? pos.x + block.controlPoint.x : defaultControlX
+  const controlY = typeof block.controlPoint?.y === 'number' ? pos.y + block.controlPoint.y : defaultControlY
+
+  const curveMidX = (x1 + 2 * controlX + x2) / 4
+  const curveMidY = (y1 + 2 * controlY + y2) / 4
+
+  const { isDragging: isMidDragging, startDrag: startMidDrag } = useFreeDrag((newMid) => {
+    const newControlX = 2 * newMid.x - (x1 + x2) / 2
+    const newControlY = 2 * newMid.y - (y1 + y2) / 2
+    onUpdate({
+      controlPoint: {
+        x: newControlX - pos.x,
+        y: newControlY - pos.y,
+      },
+    })
+  }, zoom)
 
   // Calculate arrow direction at end point (tangent to curve)
   const t = 0.95 // Point near end to calculate tangent
@@ -388,6 +468,12 @@ function CurvedArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate,
             isDragging={isEndpointDragging === 'end'}
             onMouseDown={startEndpointDrag('end', endPoint)}
           />
+          <MidpointHandle
+            x={curveMidX}
+            y={curveMidY}
+            isDragging={isMidDragging}
+            onMouseDown={startMidDrag({ x: curveMidX, y: curveMidY })}
+          />
         </>
       )}
 
@@ -411,19 +497,38 @@ function AngledArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate,
   const dashArray = getStrokeDashArray(strokeStyle, strokeWidth)
   
   const { startPoint, endPoint, x1, y1, x2, y2 } = getLineCoordinates(block)
+  const pos = block.position || { x: 0, y: 0 }
   const { isDragging: isEndpointDragging, startDrag: startEndpointDrag } = useEndpointDrag(onUpdate, zoom)
   const { isDragging: isLineDragging, startDrag: startLineDrag } = useLineDrag(onUpdate, zoom)
 
-  // Create right-angle path: horizontal first, then vertical
-  const midX = x2
-  const midY = y1
+  const bendMode = block.bend?.mode === 'y' ? 'y' : 'x'
+  const bendValue = typeof block.bend?.value === 'number'
+    ? block.bend.value
+    : (bendMode === 'y' ? startPoint.y : endPoint.x)
+
+  const bendX = bendMode === 'x' ? pos.x + bendValue : null
+  const bendY = bendMode === 'y' ? pos.y + bendValue : null
+
+  const p1x = bendMode === 'x' ? bendX : x1
+  const p1y = bendMode === 'x' ? y1 : bendY
+  const p2x = bendMode === 'x' ? bendX : x2
+  const p2y = bendMode === 'x' ? y2 : bendY
+
+  const midHandleX = bendMode === 'x' ? bendX : (x1 + x2) / 2
+  const midHandleY = bendMode === 'x' ? (y1 + y2) / 2 : bendY
+
+  const { isDragging: isMidDragging, startDrag: startMidDrag } = useFreeDrag((newMid, deltaX, deltaY) => {
+    const nextMode = Math.abs(deltaX) >= Math.abs(deltaY) ? 'x' : 'y'
+    const nextValue = nextMode === 'x' ? (newMid.x - pos.x) : (newMid.y - pos.y)
+    onUpdate({ bend: { mode: nextMode, value: nextValue } })
+  }, zoom)
 
   // Hit area bounds
   const hitArea = {
-    left: Math.min(x1, x2) - HIT_AREA_PADDING,
-    top: Math.min(y1, y2) - HIT_AREA_PADDING,
-    width: Math.abs(x2 - x1) + HIT_AREA_PADDING * 2,
-    height: Math.abs(y2 - y1) + HIT_AREA_PADDING * 2,
+    left: Math.min(x1, x2, p1x, p2x) - HIT_AREA_PADDING,
+    top: Math.min(y1, y2, p1y, p2y) - HIT_AREA_PADDING,
+    width: Math.max(x1, x2, p1x, p2x) - Math.min(x1, x2, p1x, p2x) + HIT_AREA_PADDING * 2,
+    height: Math.max(y1, y2, p1y, p2y) - Math.min(y1, y2, p1y, p2y) + HIT_AREA_PADDING * 2,
   }
 
   const handleMouseDown = (e) => {
@@ -431,9 +536,6 @@ function AngledArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate,
     onSelect()
     startLineDrag(block.position || { x: 0, y: 0 })(e)
   }
-
-  // Arrow direction (vertical at end)
-  const arrowDir = y2 > y1 ? 1 : -1
 
   return (
     <>
@@ -469,7 +571,7 @@ function AngledArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate,
           </marker>
         </defs>
         <path
-          d={`M ${x1} ${y1} L ${midX} ${midY} L ${x2} ${y2}`}
+          d={`M ${x1} ${y1} L ${p1x} ${p1y} L ${p2x} ${p2y} L ${x2} ${y2}`}
           stroke={strokeColor}
           strokeWidth={strokeWidth}
           strokeDasharray={dashArray}
@@ -491,6 +593,12 @@ function AngledArrowShape({ block, isSelected, isMinimalist, onSelect, onUpdate,
             y={y2}
             isDragging={isEndpointDragging === 'end'}
             onMouseDown={startEndpointDrag('end', endPoint)}
+          />
+          <MidpointHandle
+            x={midHandleX}
+            y={midHandleY}
+            isDragging={isMidDragging}
+            onMouseDown={startMidDrag({ x: midHandleX, y: midHandleY })}
           />
         </>
       )}

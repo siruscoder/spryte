@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { X, Search } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { X, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 
 // Get all available icon names from lucide-react
@@ -32,16 +32,29 @@ const ICON_NAMES = Object.keys(LucideIcons).filter(name => {
 
 export default function IconPicker({ onSelect, onClose, position }) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [pageOffset, setPageOffset] = useState(0)
 
-  const filteredIcons = useMemo(() => {
+  useEffect(() => {
+    setPageOffset(0)
+  }, [searchQuery])
+
+  const allMatchingIcons = useMemo(() => {
     if (!searchQuery.trim()) {
-      return ICON_NAMES.slice(0, 100)
+      return ICON_NAMES
     }
     const query = searchQuery.toLowerCase()
-    return ICON_NAMES.filter(name => 
-      name.toLowerCase().includes(query)
-    ).slice(0, 100)
+    return ICON_NAMES.filter(name => name.toLowerCase().includes(query))
   }, [searchQuery])
+
+  const filteredIcons = useMemo(() => {
+    return allMatchingIcons.slice(pageOffset, pageOffset + 100)
+  }, [allMatchingIcons, pageOffset])
+
+  const totalMatching = allMatchingIcons.length
+  const startNumber = totalMatching === 0 ? 0 : pageOffset + 1
+  const endNumber = Math.min(pageOffset + filteredIcons.length, totalMatching)
+  const canPrev = pageOffset > 0
+  const canNext = pageOffset + 100 < totalMatching
 
   return (
     <>
@@ -86,9 +99,37 @@ export default function IconPicker({ onSelect, onClose, position }) {
               autoFocus
             />
           </div>
-          <p className="text-xs text-gray-500 mt-2">
-            Showing {filteredIcons.length} of {searchQuery.trim() ? ICON_NAMES.filter(name => name.toLowerCase().includes(searchQuery.toLowerCase())).length : ICON_NAMES.length} icon{filteredIcons.length !== 1 ? 's' : ''}
-          </p>
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-xs text-gray-500">
+              Showing {startNumber}-{endNumber} of {totalMatching} icon{totalMatching !== 1 ? 's' : ''}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className={`p-1 rounded transition-colors ${canPrev ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                onClick={() => {
+                  if (!canPrev) return
+                  setPageOffset((prev) => Math.max(0, prev - 100))
+                }}
+                title="Previous 100"
+                disabled={!canPrev}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                className={`p-1 rounded transition-colors ${canNext ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                onClick={() => {
+                  if (!canNext) return
+                  setPageOffset((prev) => Math.min(Math.max(0, totalMatching - 100), prev + 100))
+                }}
+                title="Next 100"
+                disabled={!canNext}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Icon Grid */}

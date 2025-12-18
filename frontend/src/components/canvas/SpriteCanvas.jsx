@@ -9,6 +9,59 @@ import { useNotesStore, useAuthStore } from '../../stores'
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 2
 
+function getBlockBounds(block) {
+  if (!block) return null
+
+  if (block.type === 'text') {
+    const x = Number(block.x)
+    const y = Number(block.y)
+    const width = Number(block.width)
+    const height = Number(block.height)
+    if (![x, y, width, height].every(Number.isFinite)) return null
+    return { minX: x, minY: y, maxX: x + width, maxY: y + height }
+  }
+
+  if (block.type === 'shape') {
+    const px = Number(block.position?.x)
+    const py = Number(block.position?.y)
+    if (![px, py].every(Number.isFinite)) return null
+
+    const isLineType = ['line', 'arrow', 'curved_arrow', 'angled_arrow'].includes(block.shapeType)
+    if (isLineType) {
+      const sx = Number(block.startPoint?.x)
+      const sy = Number(block.startPoint?.y)
+      const ex = Number(block.endPoint?.x)
+      const ey = Number(block.endPoint?.y)
+      if (![sx, sy, ex, ey].every(Number.isFinite)) return null
+      const x1 = px + sx
+      const y1 = py + sy
+      const x2 = px + ex
+      const y2 = py + ey
+      return {
+        minX: Math.min(x1, x2),
+        minY: Math.min(y1, y2),
+        maxX: Math.max(x1, x2),
+        maxY: Math.max(y1, y2),
+      }
+    }
+
+    const w = Number(block.size?.width)
+    const h = Number(block.size?.height)
+    if (![w, h].every(Number.isFinite)) return null
+    return { minX: px, minY: py, maxX: px + w, maxY: py + h }
+  }
+
+  if (block.type === 'icon') {
+    const px = Number(block.position?.x)
+    const py = Number(block.position?.y)
+    const s = Number(block.size)
+    if (![px, py, s].every(Number.isFinite)) return null
+    return { minX: px, minY: py, maxX: px + s, maxY: py + s }
+  }
+
+  return null
+}
+
 // Convert stroke style to SVG stroke-dasharray
 function getStrokeDashArray(strokeStyle, strokeWidth = 2) {
   switch (strokeStyle) {
@@ -268,15 +321,19 @@ const SpriteCanvas = forwardRef(({
     if (!e.ctrlKey && !e.metaKey) return
     e.preventDefault()
 
+    if (!containerRef.current) return
+
+    const currentZoom = Number.isFinite(camera.zoom) ? camera.zoom : 1
+
     const rect = containerRef.current.getBoundingClientRect()
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
 
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
-    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, camera.zoom * zoomFactor))
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, currentZoom * zoomFactor))
 
     // Zoom toward mouse position
-    const scale = newZoom / camera.zoom
+    const scale = newZoom / currentZoom
     const newX = mouseX - (mouseX - camera.x) * scale
     const newY = mouseY - (mouseY - camera.y) * scale
 
@@ -289,6 +346,8 @@ const SpriteCanvas = forwardRef(({
 
   // Zoom to fit
   const zoomToFit = useCallback(() => {
+    if (!containerRef.current) return
+
     if (blocks.length === 0) {
       setCamera({ x: 0, y: 0, zoom: 1 })
       return
@@ -297,12 +356,19 @@ const SpriteCanvas = forwardRef(({
     // Calculate bounding box of all blocks
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
     
-    blocks.forEach(block => {
-      minX = Math.min(minX, block.x)
-      minY = Math.min(minY, block.y)
-      maxX = Math.max(maxX, block.x + block.width)
-      maxY = Math.max(maxY, block.y + block.height)
+    blocks.forEach((block) => {
+      const bounds = getBlockBounds(block)
+      if (!bounds) return
+      minX = Math.min(minX, bounds.minX)
+      minY = Math.min(minY, bounds.minY)
+      maxX = Math.max(maxX, bounds.maxX)
+      maxY = Math.max(maxY, bounds.maxY)
     })
+
+    if (![minX, minY, maxX, maxY].every(Number.isFinite) || maxX <= minX || maxY <= minY) {
+      setCamera((prev) => ({ ...prev, zoom: 1 }))
+      return
+    }
 
     // Add padding
     const padding = 50
@@ -310,11 +376,16 @@ const SpriteCanvas = forwardRef(({
     const height = maxY - minY + padding * 2
     
     const containerRect = containerRef.current.getBoundingClientRect()
+
+    if (containerRect.width <= 0 || containerRect.height <= 0 || width <= 0 || height <= 0) {
+      setCamera((prev) => ({ ...prev, zoom: 1 }))
+      return
+    }
     
     // Calculate zoom to fit
     const zoomX = containerRect.width / width
     const zoomY = containerRect.height / height
-    const zoom = Math.min(Math.min(zoomX, zoomY), 1) // Don't zoom in past 100% automatically
+    const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(Math.min(zoomX, zoomY), 1))) // Don't zoom in past 100% automatically
 
     // Center content
     const x = (containerRect.width - width * zoom) / 2 - minX * zoom + padding * zoom
@@ -857,21 +928,35 @@ const SpriteCanvas = forwardRef(({
         </button>
         <div className="w-px h-4 bg-gray-200" />
         <button
-          onClick={() => setCamera(prev => ({ ...prev, zoom: Math.max(MIN_ZOOM, prev.zoom - 0.1) }))}
+          onClick={() => setCamera(prev => {
+            const z = Number.isFinite(prev.zoom) ? prev.zoom : 1
+            return { ...prev, zoom: Math.max(MIN_ZOOM, z - 0.1) }
+          })}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
           title="Zoom out"
         >
           <Minus className="w-4 h-4" />
         </button>
         <span className="text-xs font-medium text-gray-600 w-12 text-center select-none">
-          {Math.round(camera.zoom * 100)}%
+          {Math.round((Number.isFinite(camera.zoom) ? camera.zoom : 1) * 100)}%
         </span>
         <button
-          onClick={() => setCamera(prev => ({ ...prev, zoom: Math.min(MAX_ZOOM, prev.zoom + 0.1) }))}
+          onClick={() => setCamera(prev => {
+            const z = Number.isFinite(prev.zoom) ? prev.zoom : 1
+            return { ...prev, zoom: Math.min(MAX_ZOOM, z + 0.1) }
+          })}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
           title="Zoom in"
         >
           <Plus className="w-4 h-4" />
+        </button>
+        <div className="w-px h-4 bg-gray-200" />
+        <button
+          onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+          title="Reset view"
+        >
+          <ZoomIn className="w-4 h-4" />
         </button>
       </div>
 

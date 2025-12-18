@@ -16,7 +16,25 @@ class AIProvider(ABC):
         """Get prompt for the given action."""
         prompts = {
             'rewrite': f'Rewrite the following text for clarity and better readability. Keep the same meaning but improve the writing:\n\n{text}',
-            'summarize': f'Summarize the following text concisely while preserving the key points:\n\n{text}',
+            'clarify': (
+                "Clarify the following text so it is easier to understand for someone reading these notes. "
+                "Rules:\n"
+                "1. Preserve the original meaning and intent.\n"
+                "2. Simplify confusing phrasing and add brief clarifying context where helpful.\n"
+                "3. Expand acronyms and abbreviations when the context makes the expansion reasonably inferable (e.g., spell out the acronym once).\n"
+                "4. Preserve technical terms as written; do not replace them with looser synonyms that change meaning.\n"
+                "5. Output only the clarified text with no preamble, no bullets unless the original is bullets.\n\n"
+                f"Text:\n\n{text}"
+            ),
+            'summarize': (
+                "Summarize the following text concisely. "
+                "Rules:\n"
+                "1. Preserve technical terms, proper nouns, and domain-specific wording exactly where possible.\n"
+                "2. Do not replace specialized terms with similar words that could change the meaning.\n"
+                "3. Keep the core intent and any critical constraints, numbers, or conditions.\n"
+                "4. Output only the summary text with no preamble.\n\n"
+                f"Text:\n\n{text}"
+            ),
             'expand': f'Expand on the following idea with more detail and explanation:\n\n{text}',
             'bullets': f'Convert the following text into clear, organized bullet points:\n\n{text}',
             'insights': f'Generate key insights and follow-up questions based on the following text:\n\n{text}',
@@ -125,6 +143,7 @@ class AIService:
         """Get list of available AI actions."""
         return [
             {'id': 'polish', 'name': 'Polish', 'description': 'Improve clarity and brevity'},
+            {'id': 'clarify', 'name': 'Clarify', 'description': 'Simplify and add brief context (expands acronyms when possible)'},
             {'id': 'rewrite', 'name': 'Rewrite for Clarity', 'description': 'Improve readability while keeping the same meaning'},
             {'id': 'summarize', 'name': 'Summarize', 'description': 'Create a concise summary'},
             {'id': 'expand', 'name': 'Expand', 'description': 'Add more detail and explanation'},
