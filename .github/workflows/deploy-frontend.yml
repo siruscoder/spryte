@@ -66,6 +66,7 @@ jobs:
               'status',
               'requiresAttributes',
               'compatibilities',
+              'enableFaultInjection',
               'registeredAt',
               'registeredBy',
           ]:
