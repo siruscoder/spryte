@@ -333,6 +333,87 @@ Depending on §2.1 trigger (tag-based deploy):
 - Backend deploy: create and push tag `backend-vX.Y.Z`
 - Frontend deploy: create and push tag `frontend-vX.Y.Z`
 
+#### 6.1.1 Exact release procedure (copy/paste)
+
+This is the repeatable procedure to deploy the latest releaseable code to AWS.
+
+**Important:** “Sync changes” in an IDE often pushes commits but does not push tags. Always push tags explicitly.
+
+1) Commit your releaseable changes
+
+- Ensure you are on `main`
+- Ensure `git status` is clean after committing
+
+```bash
+git status
+git add -A
+git commit -m "release: <short description>"
+```
+
+2) Push the commit to GitHub
+
+```bash
+git push origin main
+```
+
+3) Choose the version number
+
+Pick a version like `0.1.4`.
+
+- Use `backend-v0.1.4` to deploy backend
+- Use `frontend-v0.1.4` to deploy frontend
+- If you changed both, create and push both tags for the same version.
+
+4) Create tags locally (choose one)
+
+**Lightweight tags (ok):**
+
+```bash
+git tag backend-v0.1.4
+git tag frontend-v0.1.4
+```
+
+**Annotated tags (preferred):**
+
+```bash
+git tag -a backend-v0.1.4 -m "Backend deploy 0.1.4"
+git tag -a frontend-v0.1.4 -m "Frontend deploy 0.1.4"
+```
+
+5) Push tags to GitHub (this triggers deployments)
+
+```bash
+git push origin backend-v0.1.4 frontend-v0.1.4
+```
+
+6) Monitor deployments
+
+GitHub → Actions:
+
+- `Deploy Backend` should run for `backend-v0.1.4`
+- `Deploy Frontend` should run for `frontend-v0.1.4`
+
+In each workflow, the final step waits for ECS stability:
+
+- `Deploy to ECS service (wait-for-service-stability)`
+
+7) Verify (smoke test)
+
+- Backend: `GET /api/health` returns `200`
+- Frontend: `GET /` returns `200`
+
+8) If something fails
+
+- Open the failed GitHub Actions run and copy/paste the failing step + error.
+- In AWS ECS, open the service Events:
+  - `spryte-backend-service`
+  - `spryte-frontend-service`
+  Look for `CannotPullContainerError`, health check failures, or crash loops.
+
+9) Tag safety rule
+
+Do not reuse an old tag name (example: do not re-push `backend-v0.1.4` after it already exists). Use a new version.
+
 Expected result:
 
 - GitHub Actions workflow runs
@@ -420,3 +501,83 @@ If you are not 100% certain these keys were never committed/pushed, follow this 
 - 2025-12-18: Created IAM role `SpryteGithubDeployRole` with GitHub OIDC trust policy scoped to `backend-v*` and `frontend-v*` tags.
 - 2025-12-18: Attached inline permissions policy `SpryteGithubDeployInlinePolicy` (ECR push + ECS deploy + iam:PassRole).
 - 2025-12-18: Set GitHub Actions secret `AWS_ROLE_TO_ASSUME` and repo Variables (12 total) per §4.2.
+
+## 9) Quickstart: push code to GitHub that deploys to AWS
+
+This repo deploys to AWS ECS when you push a tag matching:
+
+- Backend: `backend-vX.Y.Z`
+- Frontend: `frontend-vX.Y.Z`
+
+Commits pushed to `main` do **not** deploy by themselves.
+
+### 9.1 Standard flow (recommended)
+
+1) Make changes locally.
+
+2) Commit them.
+
+```bash
+git status
+git add -A
+git commit -m "<message>"
+```
+
+3) Push the commit to GitHub.
+
+```bash
+git push origin main
+```
+
+4) Create deploy tags on the commit you just pushed.
+
+If you changed only one side, create only that tag.
+
+```bash
+git tag -a backend-vX.Y.Z -m "Backend deploy X.Y.Z"
+git tag -a frontend-vX.Y.Z -m "Frontend deploy X.Y.Z"
+```
+
+5) Push the tags to GitHub (this triggers the deployments).
+
+```bash
+git push origin backend-vX.Y.Z frontend-vX.Y.Z
+```
+
+6) Watch deploy status.
+
+GitHub → Actions:
+
+- `Deploy Backend` should run for `backend-vX.Y.Z`
+- `Deploy Frontend` should run for `frontend-vX.Y.Z`
+
+7) Verify.
+
+- Backend: `GET /api/health` returns `200`
+- Frontend: load `/` and verify the expected UI behavior
+
+### 9.2 Safety checks (use these when in doubt)
+
+Confirm what commit you’re about to tag:
+
+```bash
+git log -n 3 --oneline
+```
+
+Confirm the tags don’t already exist locally:
+
+```bash
+git tag -l "backend-vX.Y.Z" "frontend-vX.Y.Z"
+```
+
+Confirm what commit a tag points to:
+
+```bash
+git show -s --format=fuller backend-vX.Y.Z
+```
+
+### 9.3 Important rules
+
+- Do not reuse an old tag name. If you need to redeploy, cut a new version (example: `frontend-v0.1.5`).
+- Some IDE “sync” buttons push commits but do not push tags. Always push tags explicitly.
+- Frontend changes may require an incognito window / hard refresh after deploy because static assets can be cached.
